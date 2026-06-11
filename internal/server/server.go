@@ -253,6 +253,7 @@ func (s *Server) routes() {
 	mux.Handle("GET /api/hub/popular", apiChain.ThenFunc(s.handleHubPopular))
 	mux.Handle("GET /api/hub/search", apiChain.ThenFunc(s.handleHubSearch))
 	mux.Handle("GET /api/hub/repo/{repo...}", apiChain.ThenFunc(s.handleHubRepo))
+	mux.Handle("GET /api/hub/detail/{repo...}", apiChain.ThenFunc(s.handleHubDetail))
 	mux.Handle("GET /api/hub/downloads", apiChain.ThenFunc(s.handleHubDownloads))
 	mux.Handle("POST /api/hub/download", apiChain.ThenFunc(s.handleHubDownload))
 	mux.Handle("POST /api/hub/download/cancel", apiChain.ThenFunc(s.handleHubDownloadCancel))

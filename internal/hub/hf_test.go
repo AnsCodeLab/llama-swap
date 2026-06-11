@@ -18,7 +18,8 @@ func TestHubManager_Search(t *testing.T) {
 		assert.Equal(t, "gguf", r.URL.Query().Get("filter"))
 		assert.Equal(t, "qwen", r.URL.Query().Get("search"))
 		assert.Equal(t, "Bearer tok", r.Header.Get("Authorization"))
-		w.Write([]byte(`[{"id":"bartowski/Qwen-GGUF","downloads":1000,"likes":42}]`))
+		assert.Contains(t, r.URL.Query()["expand[]"], "lastModified")
+		w.Write([]byte(`[{"id":"bartowski/Qwen-GGUF","downloads":1000,"likes":42,"lastModified":"2026-01-01T00:00:00.000Z","pipeline_tag":"text-generation"}]`))
 	}))
 	defer ts.Close()
 
@@ -29,6 +30,51 @@ func TestHubManager_Search(t *testing.T) {
 	assert.Equal(t, "bartowski/Qwen-GGUF", repos[0].ID)
 	assert.Equal(t, int64(1000), repos[0].Downloads)
 	assert.Equal(t, int64(42), repos[0].Likes)
+	assert.Equal(t, "2026-01-01T00:00:00.000Z", repos[0].LastModified)
+	assert.Equal(t, "text-generation", repos[0].PipelineTag)
+}
+
+func TestHubManager_RepoDetail(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/models/org/repo":
+			w.Write([]byte(`{"id":"org/repo","author":"org","downloads":5,"likes":2,
+				"lastModified":"2026-01-01T00:00:00.000Z","pipeline_tag":"text-generation",
+				"tags":["gguf","llama"]}`))
+		case "/org/repo/raw/main/README.md":
+			w.Write([]byte("---\nlicense: mit\n---\n# Hello\n\nModel card body."))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	m := NewManager(Options{BaseURL: ts.URL})
+	d, err := m.RepoDetail(context.Background(), "", "org/repo")
+	require.NoError(t, err)
+	assert.Equal(t, "org/repo", d.ID)
+	assert.Equal(t, "org", d.Author)
+	assert.Equal(t, int64(5), d.Downloads)
+	assert.Equal(t, "text-generation", d.PipelineTag)
+	assert.Equal(t, []string{"gguf", "llama"}, d.Tags)
+	assert.Equal(t, "# Hello\n\nModel card body.", d.Readme)
+}
+
+func TestHubManager_RepoDetailNoReadme(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/models/org/repo" {
+			w.Write([]byte(`{"id":"org/repo"}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer ts.Close()
+
+	m := NewManager(Options{BaseURL: ts.URL})
+	d, err := m.RepoDetail(context.Background(), "", "org/repo")
+	require.NoError(t, err)
+	assert.Equal(t, "", d.Readme)
+	assert.Equal(t, []string{}, d.Tags)
 }
 
 func TestHubManager_ListFiles(t *testing.T) {

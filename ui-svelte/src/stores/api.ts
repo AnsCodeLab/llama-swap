@@ -10,6 +10,7 @@ import type {
   PerformanceResponse,
   DownloadInfo,
   HubRepo,
+  HubRepoDetail,
   HubFile,
 } from "../lib/types";
 import { connectionState } from "./theme";
@@ -240,6 +241,10 @@ export async function hubSearch(query: string): Promise<HubRepo[]> {
 
 export async function hubRepoFiles(repo: string): Promise<HubFile[]> {
   return hubFetch<HubFile[]>(`/api/hub/repo/${repo}`);
+}
+
+export async function hubRepoDetail(repo: string): Promise<HubRepoDetail> {
+  return hubFetch<HubRepoDetail>(`/api/hub/detail/${repo}`);
 }
 
 export async function hubDownload(repo: string, file: string): Promise<void> {

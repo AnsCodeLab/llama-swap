@@ -81,6 +81,25 @@ func (s *Server) handleHubRepo(w http.ResponseWriter, r *http.Request) {
 	sendJSON(w, files)
 }
 
+// handleHubDetail serves repo metadata plus its README model card for the
+// UI's detail modal.
+func (s *Server) handleHubDetail(w http.ResponseWriter, r *http.Request) {
+	if !s.hubEnabled(w, r) {
+		return
+	}
+	repo := r.PathValue("repo")
+	if !hub.ValidRepoName(repo) {
+		router.SendResponse(w, r, http.StatusBadRequest, "invalid repo name, expected org/name")
+		return
+	}
+	detail, err := s.hub.RepoDetail(r.Context(), s.cfg.HubToken, repo)
+	if err != nil {
+		router.SendResponse(w, r, http.StatusBadGateway, err.Error())
+		return
+	}
+	sendJSON(w, detail)
+}
+
 func (s *Server) handleHubDownloads(w http.ResponseWriter, r *http.Request) {
 	if s.hub == nil {
 		router.SendResponse(w, r, http.StatusServiceUnavailable, "hub downloads are disabled")

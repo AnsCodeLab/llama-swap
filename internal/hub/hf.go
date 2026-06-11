@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -17,9 +18,11 @@ const DefaultBaseURL = "https://huggingface.co"
 
 // RepoSummary is one HF repo in popular/search results.
 type RepoSummary struct {
-	ID        string `json:"id"`
-	Downloads int64  `json:"downloads"`
-	Likes     int64  `json:"likes"`
+	ID           string `json:"id"`
+	Downloads    int64  `json:"downloads"`
+	Likes        int64  `json:"likes"`
+	LastModified string `json:"lastModified"`
+	PipelineTag  string `json:"pipelineTag"`
 }
 
 // RepoFile is one GGUF file inside an HF repo.
@@ -126,14 +129,115 @@ func (m *Manager) Search(ctx context.Context, token, query string, limit int) ([
 	q.Set("sort", "downloads")
 	q.Set("direction", "-1")
 	q.Set("limit", fmt.Sprintf("%d", limit))
+	q["expand[]"] = []string{"downloads", "likes", "pipeline_tag", "lastModified"}
 	if query != "" {
 		q.Set("search", query)
 	}
-	var repos []RepoSummary
-	if err := m.hfGet(ctx, token, "/api/models", q, &repos); err != nil {
+	var raw []struct {
+		ID           string `json:"id"`
+		Downloads    int64  `json:"downloads"`
+		Likes        int64  `json:"likes"`
+		LastModified string `json:"lastModified"`
+		PipelineTag  string `json:"pipeline_tag"`
+	}
+	if err := m.hfGet(ctx, token, "/api/models", q, &raw); err != nil {
 		return nil, err
 	}
+	repos := make([]RepoSummary, 0, len(raw))
+	for _, r := range raw {
+		repos = append(repos, RepoSummary{
+			ID:           r.ID,
+			Downloads:    r.Downloads,
+			Likes:        r.Likes,
+			LastModified: r.LastModified,
+			PipelineTag:  r.PipelineTag,
+		})
+	}
 	return repos, nil
+}
+
+// RepoDetail is the metadata + model card shown in the UI's detail modal.
+type RepoDetail struct {
+	ID           string   `json:"id"`
+	Author       string   `json:"author"`
+	Downloads    int64    `json:"downloads"`
+	Likes        int64    `json:"likes"`
+	LastModified string   `json:"lastModified"`
+	PipelineTag  string   `json:"pipelineTag"`
+	Tags         []string `json:"tags"`
+	Readme       string   `json:"readme"` // markdown, YAML frontmatter stripped
+}
+
+// readmeMaxBytes caps how much of a model card is fetched and returned.
+const readmeMaxBytes = 256 * 1024
+
+// RepoDetail fetches repo metadata and its README.md model card. A missing
+// README is not an error; Readme is just empty.
+func (m *Manager) RepoDetail(ctx context.Context, token, repo string) (RepoDetail, error) {
+	var info struct {
+		ID           string   `json:"id"`
+		Author       string   `json:"author"`
+		Downloads    int64    `json:"downloads"`
+		Likes        int64    `json:"likes"`
+		LastModified string   `json:"lastModified"`
+		PipelineTag  string   `json:"pipeline_tag"`
+		Tags         []string `json:"tags"`
+	}
+	if err := m.hfGet(ctx, token, "/api/models/"+repo, nil, &info); err != nil {
+		return RepoDetail{}, err
+	}
+	detail := RepoDetail{
+		ID:           info.ID,
+		Author:       info.Author,
+		Downloads:    info.Downloads,
+		Likes:        info.Likes,
+		LastModified: info.LastModified,
+		PipelineTag:  info.PipelineTag,
+		Tags:         info.Tags,
+	}
+	if detail.Tags == nil {
+		detail.Tags = []string{}
+	}
+	detail.Readme = m.fetchReadme(ctx, token, repo)
+	return detail, nil
+}
+
+func (m *Manager) fetchReadme(ctx context.Context, token, repo string) string {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.baseURL+"/"+repo+"/raw/main/README.md", nil)
+	if err != nil {
+		return ""
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := m.httpClient.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, readmeMaxBytes))
+	if err != nil {
+		return ""
+	}
+	return stripFrontmatter(string(data))
+}
+
+// stripFrontmatter removes a leading "---\n...\n---\n" YAML block (model card
+// metadata) so only the human-readable markdown remains.
+func stripFrontmatter(s string) string {
+	if !strings.HasPrefix(s, "---\n") && !strings.HasPrefix(s, "---\r\n") {
+		return s
+	}
+	rest := s[strings.Index(s, "\n")+1:]
+	for _, end := range []string{"\n---\n", "\n---\r\n", "\r\n---\r\n"} {
+		if idx := strings.Index(rest, end); idx >= 0 {
+			return strings.TrimLeft(rest[idx+len(end):], "\r\n")
+		}
+	}
+	return s
 }
 
 // ListFiles returns the GGUF files in an HF repo. When modelsDir is non-empty

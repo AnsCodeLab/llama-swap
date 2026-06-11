@@ -113,6 +113,19 @@ export interface HubRepo {
   id: string;
   downloads: number;
   likes: number;
+  lastModified: string;
+  pipelineTag: string;
+}
+
+export interface HubRepoDetail {
+  id: string;
+  author: string;
+  downloads: number;
+  likes: number;
+  lastModified: string;
+  pipelineTag: string;
+  tags: string[];
+  readme: string;
 }
 
 export interface HubFile {
