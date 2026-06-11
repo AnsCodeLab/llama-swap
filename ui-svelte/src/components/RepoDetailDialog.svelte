@@ -43,7 +43,13 @@
   // strips scripts, event handlers and javascript:/data: URLs while keeping
   // the class attributes hljs/KaTeX styling needs.
   let readmeHtml = $derived(
-    detail?.readme ? DOMPurify.sanitize(renderMarkdown(detail.readme), { USE_PROFILES: { html: true } }) : ""
+    detail?.readme
+      ? DOMPurify.sanitize(renderMarkdown(detail.readme), {
+          USE_PROFILES: { html: true },
+          FORBID_TAGS: ["style", "iframe", "form"],
+          FORBID_ATTR: ["style"],
+        })
+      : ""
   );
 
   function formatDate(iso: string): string {
