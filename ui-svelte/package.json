@@ -26,6 +26,8 @@
     "vitest": "^4.1.0"
   },
   "dependencies": {
+    "chart.js": "4.5.1",
+    "dompurify": "^3.4.9",
     "highlight.js": "^11.11.1",
     "katex": "^0.16.28",
     "lucide-svelte": "^0.563.0",
@@ -35,7 +37,6 @@
     "remark-math": "^6.0.0",
     "remark-parse": "^11.0.0",
     "remark-rehype": "^11.1.2",
-    "chart.js": "4.5.1",
     "svelte-spa-router": "^4.0.1",
     "unified": "^11.0.5",
     "unist-util-visit": "^5.1.0"

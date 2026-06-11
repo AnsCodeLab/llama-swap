@@ -1,4 +1,5 @@
 <script lang="ts">
+  import DOMPurify from "dompurify";
   import { hubRepoDetail } from "../stores/api";
   import { renderMarkdown } from "../lib/markdown";
   import type { HubRepoDetail } from "../lib/types";
@@ -37,7 +38,13 @@
     }
   }
 
-  let readmeHtml = $derived(detail?.readme ? renderMarkdown(detail.readme) : "");
+  // READMEs are third-party content (any HF repo author) and the markdown
+  // pipeline allows raw HTML, so sanitize before {@html} insertion. DOMPurify
+  // strips scripts, event handlers and javascript:/data: URLs while keeping
+  // the class attributes hljs/KaTeX styling needs.
+  let readmeHtml = $derived(
+    detail?.readme ? DOMPurify.sanitize(renderMarkdown(detail.readme), { USE_PROFILES: { html: true } }) : ""
+  );
 
   function formatDate(iso: string): string {
     if (!iso) return "";
