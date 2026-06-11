@@ -1,0 +1,80 @@
+package hub
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestHubManager_Search(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/models", r.URL.Path)
+		assert.Equal(t, "gguf", r.URL.Query().Get("filter"))
+		assert.Equal(t, "qwen", r.URL.Query().Get("search"))
+		assert.Equal(t, "Bearer tok", r.Header.Get("Authorization"))
+		w.Write([]byte(`[{"id":"bartowski/Qwen-GGUF","downloads":1000,"likes":42}]`))
+	}))
+	defer ts.Close()
+
+	m := NewManager(Options{BaseURL: ts.URL})
+	repos, err := m.Search(context.Background(), "tok", "qwen", 30)
+	require.NoError(t, err)
+	require.Len(t, repos, 1)
+	assert.Equal(t, "bartowski/Qwen-GGUF", repos[0].ID)
+	assert.Equal(t, int64(1000), repos[0].Downloads)
+	assert.Equal(t, int64(42), repos[0].Likes)
+}
+
+func TestHubManager_ListFiles(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/models/org/repo", r.URL.Path)
+		assert.Equal(t, "true", r.URL.Query().Get("blobs"))
+		w.Write([]byte(`{"siblings":[
+			{"rfilename":"README.md","size":10},
+			{"rfilename":"model-Q4_K_M.gguf","size":1234},
+			{"rfilename":"model-F16.gguf","size":5678}
+		]}`))
+	}))
+	defer ts.Close()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "model-Q4_K_M.gguf"), []byte("x"), 0644))
+
+	m := NewManager(Options{BaseURL: ts.URL})
+	files, err := m.ListFiles(context.Background(), "", "org/repo", dir)
+	require.NoError(t, err)
+	require.Len(t, files, 2) // README.md filtered out
+	assert.Equal(t, "model-F16.gguf", files[0].Name)
+	assert.Equal(t, "F16", files[0].Quant)
+	assert.False(t, files[0].Downloaded)
+	assert.Equal(t, "model-Q4_K_M.gguf", files[1].Name)
+	assert.Equal(t, "Q4_K_M", files[1].Quant)
+	assert.True(t, files[1].Downloaded)
+}
+
+func TestHubManager_DeriveModelID(t *testing.T) {
+	assert.Equal(t, "qwen3-4b-instruct-2507-ud-q4_k_xl", DeriveModelID("Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf"))
+	assert.Equal(t, "big-model-q8_0", DeriveModelID("Big-Model-Q8_0-00001-of-00003.gguf"))
+}
+
+func TestHubManager_PartSet(t *testing.T) {
+	files := []RepoFile{
+		{Name: "solo-Q4.gguf", Size: 1},
+		{Name: "big-Q8-00001-of-00002.gguf", Size: 2},
+		{Name: "big-Q8-00002-of-00002.gguf", Size: 3},
+	}
+	parts := PartSet(files, "big-Q8-00002-of-00002.gguf")
+	require.Len(t, parts, 2)
+	assert.Equal(t, "big-Q8-00001-of-00002.gguf", parts[0].Name)
+
+	solo := PartSet(files, "solo-Q4.gguf")
+	require.Len(t, solo, 1)
+
+	assert.Empty(t, PartSet(files, "missing.gguf"))
+}
