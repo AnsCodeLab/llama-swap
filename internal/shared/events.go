@@ -50,3 +50,28 @@ type InFlightRequestsEvent struct {
 func (e InFlightRequestsEvent) Type() uint32 {
 	return InFlightRequestsEventID
 }
+
+const DownloadStatusEventID = 0x08
+
+// DownloadInfo is the status of one hub download job (may span multiple
+// files for multi-part GGUFs). JSON tags match the UI's DownloadInfo type.
+type DownloadInfo struct {
+	ID              string  `json:"id"`
+	Repo            string  `json:"repo"`
+	File            string  `json:"file"`
+	ModelID         string  `json:"modelId"`
+	State           string  `json:"state"` // downloading | completed | error | cancelled
+	TotalBytes      int64   `json:"totalBytes"`
+	DownloadedBytes int64   `json:"downloadedBytes"`
+	SpeedBps        float64 `json:"speedBps"`
+	Error           string  `json:"error,omitempty"`
+}
+
+// DownloadStatusEvent carries a full snapshot of all download jobs.
+type DownloadStatusEvent struct {
+	Downloads []DownloadInfo
+}
+
+func (e DownloadStatusEvent) Type() uint32 {
+	return DownloadStatusEventID
+}
