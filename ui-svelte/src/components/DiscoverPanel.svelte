@@ -1,6 +1,7 @@
 <script lang="ts">
   import { hubPopular, hubSearch, hubRepoFiles, hubDownload, hubHardware, downloads, HubDisabledError } from "../stores/api";
   import RepoDetailDialog from "./RepoDetailDialog.svelte";
+  import GgufGuideDialog from "./GgufGuideDialog.svelte";
   import { rateModelFit, typeHint, type Hardware } from "../lib/modelFit";
   import type { HubRepo, HubFile } from "../lib/types";
 
@@ -15,6 +16,7 @@
   let filesLoading = $state(false);
   let detailRepo = $state<string | null>(null);
   let hardware = $state<Hardware | null>(null);
+  let guideOpen = $state(false);
 
   type SortKey = "downloads" | "likes" | "lastModified" | "id";
   let sortKey = $state<SortKey>("downloads");
@@ -118,7 +120,12 @@
 
 <div class="card h-full flex flex-col">
   <div class="shrink-0">
-    <h2>Discover</h2>
+    <div class="flex items-baseline gap-3">
+      <h2>Discover</h2>
+      <button class="btn btn--sm text-xs" onclick={() => (guideOpen = true)} title="How to read GGUF model names">
+        ⓘ Model names explained
+      </button>
+    </div>
     {#if disabledMessage}
       <p class="text-txtsecondary mt-2">
         Hub downloads are disabled. Set <code>modelsDir</code> in your configuration file to enable downloading
@@ -265,3 +272,4 @@
 </div>
 
 <RepoDetailDialog repo={detailRepo} onclose={() => (detailRepo = null)} />
+<GgufGuideDialog open={guideOpen} onclose={() => (guideOpen = false)} />
