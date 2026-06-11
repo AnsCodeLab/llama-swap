@@ -56,6 +56,19 @@ func TestConfigEdit_AddModelEntryNoModelsSection(t *testing.T) {
 	assert.Contains(t, string(out), `"m1":`)
 }
 
+func TestConfigEdit_AddModelEntryFlowStyleModels(t *testing.T) {
+	// `models: {}` is flow style; new entries must still render block style
+	// with a literal cmd scalar, not inline JSON-ish flow mappings.
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("models: {}\n"), 0644))
+	err := AddModelEntry(path, "m1", "M1", "llama-server --port ${PORT} -m /models/m1.gguf")
+	require.NoError(t, err)
+	out, _ := os.ReadFile(path)
+	s := string(out)
+	assert.Contains(t, s, "cmd: |")
+	assert.NotContains(t, s, `models: {"m1"`)
+}
+
 func TestConfigEdit_RemoveModelEntry(t *testing.T) {
 	path := writeTestConfig(t)
 	found, err := RemoveModelEntry(path, "qwen3-4b")

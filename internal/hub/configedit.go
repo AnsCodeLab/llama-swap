@@ -87,6 +87,9 @@ func editConfig(configPath string, fn func(models *yaml.Node) error) error {
 	if models.Kind != yaml.MappingNode {
 		return fmt.Errorf("%s: models is not a mapping", configPath)
 	}
+	// Force block style so entries render multi-line with literal cmd
+	// scalars even when the file had `models: {}` (flow style).
+	models.Style = 0
 
 	if err := fn(models); err != nil {
 		return err
