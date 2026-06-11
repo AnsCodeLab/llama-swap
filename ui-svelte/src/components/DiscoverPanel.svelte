@@ -12,6 +12,32 @@
   let repoFiles = $state<HubFile[]>([]);
   let filesLoading = $state(false);
 
+  type SortKey = "id" | "downloads" | "likes";
+  let sortKey = $state<SortKey>("downloads");
+  let sortDesc = $state(true);
+
+  let sortedRepos = $derived.by(() => {
+    const arr = [...repos];
+    arr.sort((a, b) => {
+      const cmp = sortKey === "id" ? a.id.localeCompare(b.id) : a[sortKey] - b[sortKey];
+      return sortDesc ? -cmp : cmp;
+    });
+    return arr;
+  });
+
+  function setSort(key: SortKey): void {
+    if (sortKey === key) {
+      sortDesc = !sortDesc;
+    } else {
+      sortKey = key;
+      sortDesc = key !== "id"; // names ascending, counts descending by default
+    }
+  }
+
+  function sortArrow(key: SortKey): string {
+    return sortKey === key ? (sortDesc ? " ▼" : " ▲") : "";
+  }
+
   // files already being downloaded (keyed by repo/file)
   let activeFiles = $derived(new Set($downloads.filter((d) => d.state === "downloading").map((d) => `${d.repo}/${d.file}`)));
   let completedFiles = $derived(new Set($downloads.filter((d) => d.state === "completed").map((d) => `${d.repo}/${d.file}`)));
@@ -105,13 +131,13 @@
       <table class="w-full">
         <thead class="sticky top-0 bg-card z-10">
           <tr class="text-left border-b border-gray-200 dark:border-white/10 bg-surface">
-            <th>Repository</th>
-            <th class="w-24 text-right">Downloads</th>
-            <th class="w-16 text-right">Likes</th>
+            <th><button class="font-semibold" onclick={() => setSort("id")}>Repository{sortArrow("id")}</button></th>
+            <th class="w-24 text-right"><button class="font-semibold" onclick={() => setSort("downloads")}>Downloads{sortArrow("downloads")}</button></th>
+            <th class="w-16 text-right"><button class="font-semibold" onclick={() => setSort("likes")}>Likes{sortArrow("likes")}</button></th>
           </tr>
         </thead>
         <tbody>
-          {#each repos as repo (repo.id)}
+          {#each sortedRepos as repo (repo.id)}
             <tr class="border-b hover:bg-secondary-hover border-gray-200 cursor-pointer" onclick={() => toggleRepo(repo.id)}>
               <td class="font-semibold">{repo.id}</td>
               <td class="text-right">{repo.downloads.toLocaleString()}</td>
