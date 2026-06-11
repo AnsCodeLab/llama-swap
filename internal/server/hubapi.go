@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/shirou/gopsutil/v4/mem"
+
 	"github.com/mostlygeek/llama-swap/internal/config"
 	"github.com/mostlygeek/llama-swap/internal/hub"
 	"github.com/mostlygeek/llama-swap/internal/process"
@@ -221,6 +223,31 @@ func (s *Server) handleHubDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sendJSON(w, map[string]any{"deleted": deleted, "skipped": skipped})
+}
+
+// handleHubHardware reports the machine's memory so the UI can rate model
+// fit. Not gated on modelsDir: it is plain hardware info.
+func (s *Server) handleHubHardware(w http.ResponseWriter, r *http.Request) {
+	ramMB := 0
+	if vm, err := mem.VirtualMemory(); err == nil {
+		ramMB = int(vm.Total / (1024 * 1024))
+	}
+	vramMB := 0
+	gpuName := ""
+	if s.perf != nil {
+		_, gpuStats := s.perf.Current()
+		for _, g := range gpuStats {
+			if g.MemTotalMB > vramMB {
+				vramMB = g.MemTotalMB
+				gpuName = g.Name
+			}
+		}
+	}
+	sendJSON(w, map[string]any{
+		"ramMB":   ramMB,
+		"vramMB":  vramMB,
+		"gpuName": gpuName,
+	})
 }
 
 // deleteModelFiles parses a macro-expanded cmd, collects -m/--model/--mmproj
