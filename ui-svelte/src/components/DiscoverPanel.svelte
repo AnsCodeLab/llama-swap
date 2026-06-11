@@ -227,13 +227,21 @@
                         <td class="w-24 text-right">{formatBytes(file.size)}</td>
                         <td class="w-56 text-right whitespace-nowrap">
                           {#if fit.level !== "unknown"}
-                            <span
-                              class="text-xs px-1.5 py-0.5 rounded mr-2
-                                {fit.level === 'great' ? 'bg-green-600/20 text-green-600 dark:text-green-400' : ''}
-                                {fit.level === 'good' ? 'bg-teal-600/20 text-teal-700 dark:text-teal-400' : ''}
-                                {fit.level === 'tight' ? 'bg-amber-500/20 text-amber-700 dark:text-amber-400' : ''}
-                                {fit.level === 'too-large' ? 'bg-red-600/20 text-red-600 dark:text-red-400' : ''}"
-                              title={fit.reason}>{fit.label}</span>
+                            <span class="relative group inline-block mr-2">
+                              <span
+                                class="text-xs px-1.5 py-0.5 rounded cursor-help
+                                  {fit.level === 'great' ? 'bg-green-600/20 text-green-600 dark:text-green-400' : ''}
+                                  {fit.level === 'good' ? 'bg-teal-600/20 text-teal-700 dark:text-teal-400' : ''}
+                                  {fit.level === 'tight' ? 'bg-amber-500/20 text-amber-700 dark:text-amber-400' : ''}
+                                  {fit.level === 'too-large' ? 'bg-red-600/20 text-red-600 dark:text-red-400' : ''}">{fit.label}</span>
+                              <span
+                                class="absolute bottom-full right-0 mb-2 w-72 px-3 py-2 bg-gray-900 text-white text-xs rounded-md
+                                  opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none
+                                  whitespace-normal text-left z-50 block"
+                              >
+                                {fit.reason}
+                              </span>
+                            </span>
                           {/if}
                           {#if file.downloaded || completedFiles.has(`${repo.id}/${file.name}`)}
                             <span class="status status--ready">Downloaded ✓</span>

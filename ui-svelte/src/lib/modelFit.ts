@@ -27,33 +27,33 @@ export function rateModelFit(sizeBytes: number, hw: Hardware | null): ModelFit {
     return { level: "unknown", label: "", reason: "" };
   }
   const needMB = (sizeBytes / 1024 ** 2) * OVERHEAD;
-  const suffix = "(long contexts need extra memory for the KV cache)";
+  const est = `Estimated ~${gb(needMB)} needed (file size + 15% overhead).`;
 
   if (hw.vramMB > 0 && needMB <= hw.vramMB * 0.9) {
     return {
       level: "great",
       label: "Great fit",
-      reason: `~${gb(needMB)} needed, fits in ${gb(hw.vramMB)} VRAM — fast ${suffix}`,
+      reason: `${est} Fits within 90% of your ${gb(hw.vramMB)} VRAM, so the whole model can be offloaded to the GPU for fast inference. Long contexts add KV-cache memory on top.`,
     };
   }
   if (needMB <= hw.ramMB * 0.8) {
     return {
       level: "good",
       label: "Good fit",
-      reason: `~${gb(needMB)} needed of ${gb(hw.ramMB)} RAM — runs with CPU/partial offload ${suffix}`,
+      reason: `${est} Uses under 80% of your ${gb(hw.ramMB)} RAM, leaving headroom to run with CPU or partial GPU offload. Long contexts add KV-cache memory on top.`,
     };
   }
   if (needMB <= hw.ramMB * 0.95) {
     return {
       level: "tight",
       label: "Tight",
-      reason: `~${gb(needMB)} needed of ${gb(hw.ramMB)} RAM — barely fits, likely slow or swapping`,
+      reason: `${est} Uses 80–95% of your ${gb(hw.ramMB)} RAM — it may load, but expect swapping and slow generation, with little room left for the KV cache.`,
     };
   }
   return {
     level: "too-large",
     label: "Too large",
-    reason: `~${gb(needMB)} needed but only ${gb(hw.ramMB)} RAM — exceeds this machine's memory`,
+    reason: `${est} Exceeds 95% of your ${gb(hw.ramMB)} RAM — it will not fit in memory on this machine. Pick a smaller quantization of this model instead.`,
   };
 }
 
