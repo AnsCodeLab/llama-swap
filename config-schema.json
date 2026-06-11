@@ -238,6 +238,19 @@
             "default": 5800,
             "description": "Starting port number for the automatic ${PORT} macro. The ${PORT} macro is incremented for every model that uses it."
         },
+        "modelsDir": {
+            "type": "string",
+            "description": "Absolute path where GGUF models downloaded from HuggingFace via the web UI are stored. Unset disables the download feature."
+        },
+        "hubToken": {
+            "type": "string",
+            "description": "Optional HuggingFace token for gated or rate-limited repos. Supports ${env.VAR} substitution."
+        },
+        "hubCmdTemplate": {
+            "type": "string",
+            "default": "llama-server --port ${PORT} -m ${MODEL_PATH}",
+            "description": "cmd template for config entries auto-added after a download completes. ${MODEL_PATH} is replaced with the downloaded file path."
+        },
         "sendLoadingState": {
             "type": "boolean",
             "default": false,

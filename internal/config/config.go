@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
@@ -163,6 +164,11 @@ type Config struct {
 
 	// support remote peers, see issue #433, #296
 	Peers PeerDictionaryConfig `yaml:"peers"`
+
+	// HuggingFace hub downloads (UI feature). ModelsDir enables it.
+	ModelsDir      string `yaml:"modelsDir"`
+	HubToken       string `yaml:"hubToken"`
+	HubCmdTemplate string `yaml:"hubCmdTemplate"`
 }
 
 // RoutingConfig is the canonical, normalized routing/scheduling configuration.
@@ -274,6 +280,13 @@ func LoadConfigFromReader(r io.Reader) (Config, error) {
 	case LogToStdoutProxy, LogToStdoutUpstream, LogToStdoutBoth, LogToStdoutNone:
 	default:
 		return Config{}, fmt.Errorf("logToStdout must be one of: proxy, upstream, both, none")
+	}
+
+	if config.HubCmdTemplate == "" {
+		config.HubCmdTemplate = "llama-server --port ${PORT} -m ${MODEL_PATH}"
+	}
+	if config.ModelsDir != "" && !filepath.IsAbs(config.ModelsDir) {
+		return Config{}, fmt.Errorf("modelsDir must be an absolute path, got %q", config.ModelsDir)
 	}
 
 	// Populate the aliases map
