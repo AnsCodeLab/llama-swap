@@ -12,6 +12,7 @@ import (
 
 	"github.com/mostlygeek/llama-swap/internal/chain"
 	"github.com/mostlygeek/llama-swap/internal/config"
+	"github.com/mostlygeek/llama-swap/internal/hub"
 	"github.com/mostlygeek/llama-swap/internal/logmon"
 	"github.com/mostlygeek/llama-swap/internal/perf"
 	"github.com/mostlygeek/llama-swap/internal/router"
@@ -34,6 +35,8 @@ type Server struct {
 
 	local router.LocalRouter
 	peer  router.Router
+
+	hub *hub.Manager
 
 	mux     *http.ServeMux
 	handler http.Handler
@@ -137,6 +140,13 @@ func New(cfg config.Config, muxlog *logmon.Monitor, proxylog *logmon.Monitor, up
 	return s, nil
 }
 
+// SetHubManager attaches the HuggingFace download manager. The manager is
+// created once in main and outlives config reloads; call this on every
+// server built, before it starts serving.
+func (s *Server) SetHubManager(m *hub.Manager) {
+	s.hub = m
+}
+
 // localPeerHandler dispatches a model-routed request to the local or peer
 // router. The model is resolved once via router.FetchContext.
 func (s *Server) localPeerHandler(w http.ResponseWriter, r *http.Request) {
@@ -238,6 +248,15 @@ func (s *Server) routes() {
 	mux.Handle("GET /api/performance", apiChain.ThenFunc(s.handleAPIPerformance))
 	mux.Handle("GET /api/version", apiChain.ThenFunc(s.handleAPIVersion))
 	mux.Handle("GET /api/captures/{id}", apiChain.ThenFunc(s.handleAPICapture))
+
+	// HuggingFace hub (model downloads).
+	mux.Handle("GET /api/hub/popular", apiChain.ThenFunc(s.handleHubPopular))
+	mux.Handle("GET /api/hub/search", apiChain.ThenFunc(s.handleHubSearch))
+	mux.Handle("GET /api/hub/repo/{repo...}", apiChain.ThenFunc(s.handleHubRepo))
+	mux.Handle("GET /api/hub/downloads", apiChain.ThenFunc(s.handleHubDownloads))
+	mux.Handle("POST /api/hub/download", apiChain.ThenFunc(s.handleHubDownload))
+	mux.Handle("POST /api/hub/download/cancel", apiChain.ThenFunc(s.handleHubDownloadCancel))
+	mux.Handle("POST /api/hub/delete", apiChain.ThenFunc(s.handleHubDelete))
 
 	s.mux = mux
 	s.handler = chain.New(CreateRequestLogMiddleware(s.proxylog), CreateCORSMiddleware()).Then(mux)

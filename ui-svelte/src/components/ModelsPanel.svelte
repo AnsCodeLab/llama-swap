@@ -1,11 +1,36 @@
 <script lang="ts">
-  import { models, loadModel, unloadAllModels, unloadSingleModel } from "../stores/api";
+  import { models, loadModel, unloadAllModels, unloadSingleModel, downloads, hubCancelDownload, hubDeleteModel } from "../stores/api";
   import { isNarrow } from "../stores/theme";
   import { persistentStore } from "../stores/persistent";
   import type { Model } from "../lib/types";
 
   let isUnloading = $state(false);
   let menuOpen = $state(false);
+  let deleteError = $state("");
+
+  let activeDownloads = $derived($downloads.filter((d) => d.state !== "completed"));
+
+  async function handleDelete(model: Model): Promise<void> {
+    if (!confirm(`Delete "${model.id}"?\n\nThis removes its GGUF file(s) from the models directory and its entry from the configuration file.`)) {
+      return;
+    }
+    deleteError = "";
+    try {
+      await hubDeleteModel(model.id);
+    } catch (e) {
+      deleteError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  function formatBytes(n: number): string {
+    if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(1)} GB`;
+    if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(1)} MB`;
+    return `${(n / 1024).toFixed(0)} KB`;
+  }
+
+  function progressPct(d: { downloadedBytes: number; totalBytes: number }): number {
+    return d.totalBytes > 0 ? Math.min(100, (d.downloadedBytes / d.totalBytes) * 100) : 0;
+  }
 
   const showUnlistedStore = persistentStore<boolean>("showUnlisted", true);
   const showIdorNameStore = persistentStore<"id" | "name">("showIdorName", "id");
@@ -147,6 +172,34 @@
   </div>
 
   <div class="flex-1 overflow-y-auto">
+    {#if deleteError}
+      <p class="text-red-500">{deleteError}</p>
+    {/if}
+    {#if activeDownloads.length > 0}
+      <h3 class="mb-2">Downloads</h3>
+      {#each activeDownloads as d (d.id)}
+        <div class="mb-2 p-2 border border-gray-200 dark:border-white/10 rounded">
+          <div class="flex justify-between items-center">
+            <span class="font-semibold">{d.file}</span>
+            {#if d.state === "downloading"}
+              <button class="btn btn--sm" onclick={() => hubCancelDownload(d.id)}>Cancel</button>
+            {/if}
+          </div>
+          {#if d.state === "downloading"}
+            <div class="w-full bg-surface rounded h-2 mt-1">
+              <div class="bg-primary h-2 rounded" style="width: {progressPct(d)}%"></div>
+            </div>
+            <p class="text-xs text-txtsecondary mt-1">
+              {formatBytes(d.downloadedBytes)} / {formatBytes(d.totalBytes)} — {formatBytes(d.speedBps)}/s
+            </p>
+          {:else if d.state === "error"}
+            <p class="text-xs text-red-500 mt-1">{d.error}</p>
+          {:else}
+            <p class="text-xs text-txtsecondary mt-1">{d.state}</p>
+          {/if}
+        </div>
+      {/each}
+    {/if}
     <table class="w-full">
       <thead class="sticky top-0 bg-card z-10">
         <tr class="text-left border-b border-gray-200 dark:border-white/10 bg-surface">
@@ -169,12 +222,19 @@
                 <p class="text-xs text-txtsecondary">Aliases: {model.aliases.join(", ")}</p>
               {/if}
             </td>
-            <td class="w-12">
-              {#if model.state === "stopped"}
-                <button class="btn btn--sm" onclick={() => loadModel(model.id)}>Load</button>
-              {:else}
-                <button class="btn btn--sm" onclick={() => unloadSingleModel(model.id)} disabled={model.state !== "ready"}>Unload</button>
-              {/if}
+            <td class="w-24">
+              <div class="flex gap-1">
+                {#if model.state === "stopped"}
+                  <button class="btn btn--sm" onclick={() => loadModel(model.id)}>Load</button>
+                {:else}
+                  <button class="btn btn--sm" onclick={() => unloadSingleModel(model.id)} disabled={model.state !== "ready"}>Unload</button>
+                {/if}
+                <button class="btn btn--sm" title="Delete model" aria-label="Delete model" onclick={() => handleDelete(model)} disabled={model.state === "starting"}>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4">
+                    <path fill-rule="evenodd" d="M16.5 4.478v.227a48.816 48.816 0 0 1 3.878.512.75.75 0 1 1-.256 1.478l-.209-.035-1.005 13.07a3 3 0 0 1-2.991 2.77H8.084a3 3 0 0 1-2.991-2.77L4.087 6.66l-.209.035a.75.75 0 0 1-.256-1.478A48.567 48.567 0 0 1 7.5 4.705v-.227c0-1.564 1.213-2.9 2.816-2.951a52.662 52.662 0 0 1 3.369 0c1.603.051 2.815 1.387 2.815 2.951Zm-6.136-1.452a51.196 51.196 0 0 1 3.273 0C14.39 3.05 15 3.684 15 4.478v.113a49.488 49.488 0 0 0-6 0v-.113c0-.794.609-1.428 1.364-1.452Zm-.355 5.945a.75.75 0 1 0-1.5.058l.347 9a.75.75 0 1 0 1.499-.058l-.346-9Zm5.48.058a.75.75 0 1 0-1.498-.058l-.347 9a.75.75 0 0 0 1.5.058l.345-9Z" clip-rule="evenodd" />
+                  </svg>
+                </button>
+              </div>
             </td>
             <td class="w-20">
               <span class="w-16 text-center status status--{model.state}">{model.state}</span>

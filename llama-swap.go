@@ -17,6 +17,7 @@ import (
 
 	"github.com/mostlygeek/llama-swap/internal/config"
 	"github.com/mostlygeek/llama-swap/internal/event"
+	"github.com/mostlygeek/llama-swap/internal/hub"
 	"github.com/mostlygeek/llama-swap/internal/logmon"
 	"github.com/mostlygeek/llama-swap/internal/perf"
 	"github.com/mostlygeek/llama-swap/internal/process"
@@ -145,11 +146,18 @@ func main() {
 
 	buildInfo := server.BuildInfo{Version: version, Commit: commit, Date: date}
 
+	// hubManager outlives config reloads so active downloads keep running.
+	hubManager := hub.NewManager(hub.Options{
+		ConfigPath: configPath,
+		Logger:     proxyLog,
+	})
+
 	initialSrv, err := server.New(cfg, muxLog, proxyLog, upstreamLog, perfMon, buildInfo)
 	if err != nil {
 		slog.Error("failed to create server", "error", err)
 		os.Exit(1)
 	}
+	initialSrv.SetHubManager(hubManager)
 
 	// activeSrv is swapped atomically during hot reload.
 	var activeMu sync.RWMutex
@@ -205,6 +213,7 @@ func main() {
 			proxyLog.Warnf("failed to build new server during reload: %v", err)
 			return
 		}
+		newSrv.SetHubManager(hubManager)
 
 		activeMu.Lock()
 		old := activeSrv
@@ -224,6 +233,8 @@ func main() {
 
 		proxyLog.Info("configuration reloaded")
 	}
+
+	hubManager.SetReloadFunc(reload)
 
 	watcherCtx, watcherCancel := context.WithCancel(context.Background())
 	defer watcherCancel()

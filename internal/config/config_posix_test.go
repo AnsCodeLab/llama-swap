@@ -193,10 +193,11 @@ groups:
 	}
 
 	expected := Config{
-		LogLevel:      "info",
-		LogTimeFormat: "",
-		LogToStdout:   LogToStdoutProxy,
-		StartPort:     5800,
+		LogLevel:       "info",
+		LogTimeFormat:  "",
+		LogToStdout:    LogToStdoutProxy,
+		StartPort:      5800,
+		HubCmdTemplate: "llama-server --port ${PORT} -m ${MODEL_PATH}",
 		Macros: MacroList{
 			{"svr-path", "path/to/server"},
 		},
