@@ -258,6 +258,7 @@ func (s *Server) routes() {
 	mux.Handle("POST /api/hub/download", apiChain.ThenFunc(s.handleHubDownload))
 	mux.Handle("POST /api/hub/download/cancel", apiChain.ThenFunc(s.handleHubDownloadCancel))
 	mux.Handle("POST /api/hub/delete", apiChain.ThenFunc(s.handleHubDelete))
+	mux.Handle("GET /api/hub/hardware", apiChain.ThenFunc(s.handleHubHardware))
 
 	s.mux = mux
 	s.handler = chain.New(CreateRequestLogMiddleware(s.proxylog), CreateCORSMiddleware()).Then(mux)

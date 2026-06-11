@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { hubPopular, hubSearch, hubRepoFiles, hubDownload, downloads, HubDisabledError } from "../stores/api";
+  import { hubPopular, hubSearch, hubRepoFiles, hubDownload, hubHardware, downloads, HubDisabledError } from "../stores/api";
   import RepoDetailDialog from "./RepoDetailDialog.svelte";
+  import { rateModelFit, typeHint, type Hardware } from "../lib/modelFit";
   import type { HubRepo, HubFile } from "../lib/types";
 
   let query = $state("");
@@ -13,6 +14,7 @@
   let repoFiles = $state<HubFile[]>([]);
   let filesLoading = $state(false);
   let detailRepo = $state<string | null>(null);
+  let hardware = $state<Hardware | null>(null);
 
   type SortKey = "downloads" | "likes" | "lastModified" | "id";
   let sortKey = $state<SortKey>("downloads");
@@ -108,6 +110,9 @@
 
   $effect(() => {
     loadRepos();
+    hubHardware()
+      .then((hw) => (hardware = hw))
+      .catch(() => (hardware = null)); // no badges when unavailable
   });
 </script>
 
@@ -182,6 +187,11 @@
               {#if repo.pipelineTag}
                 <span class="px-1.5 py-0.5 rounded border border-gray-200 dark:border-white/10">{repo.pipelineTag}</span>
               {/if}
+              {#if typeHint(repo.pipelineTag)}
+                <span class="px-1.5 py-0.5 rounded border border-amber-500/50 text-amber-700 dark:text-amber-400">
+                  {typeHint(repo.pipelineTag)}
+                </span>
+              {/if}
               {#if repo.lastModified}
                 <span>Updated {timeAgo(repo.lastModified)}</span>
               {/if}
@@ -210,11 +220,21 @@
                 <table class="w-full mt-2">
                   <tbody>
                     {#each repoFiles as file (file.name)}
+                      {@const fit = rateModelFit(file.size, hardware)}
                       <tr>
                         <td class="break-all">{file.name}</td>
                         <td class="w-20">{file.quant}</td>
                         <td class="w-24 text-right">{formatBytes(file.size)}</td>
-                        <td class="w-32 text-right">
+                        <td class="w-56 text-right whitespace-nowrap">
+                          {#if fit.level !== "unknown"}
+                            <span
+                              class="text-xs px-1.5 py-0.5 rounded mr-2
+                                {fit.level === 'great' ? 'bg-green-600/20 text-green-600 dark:text-green-400' : ''}
+                                {fit.level === 'good' ? 'bg-teal-600/20 text-teal-700 dark:text-teal-400' : ''}
+                                {fit.level === 'tight' ? 'bg-amber-500/20 text-amber-700 dark:text-amber-400' : ''}
+                                {fit.level === 'too-large' ? 'bg-red-600/20 text-red-600 dark:text-red-400' : ''}"
+                              title={fit.reason}>{fit.label}</span>
+                          {/if}
                           {#if file.downloaded || completedFiles.has(`${repo.id}/${file.name}`)}
                             <span class="status status--ready">Downloaded ✓</span>
                           {:else if activeFiles.has(`${repo.id}/${file.name}`)}

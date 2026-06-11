@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -40,6 +41,23 @@ func TestHubAPI_DisabledWithoutManager(t *testing.T) {
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/hub/downloads", nil))
 	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+}
+
+func TestHubAPI_Hardware(t *testing.T) {
+	srv := newHubTestServer(t, "models: {}\n")
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/hub/hardware", nil))
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var hw struct {
+		RamMB   int    `json:"ramMB"`
+		VramMB  int    `json:"vramMB"`
+		GpuName string `json:"gpuName"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &hw))
+	assert.Greater(t, hw.RamMB, 0)
+	assert.GreaterOrEqual(t, hw.VramMB, 0)
 }
 
 func TestHubAPI_RejectsInvalidRepoName(t *testing.T) {

@@ -13,6 +13,7 @@ import type {
   HubRepoDetail,
   HubFile,
 } from "../lib/types";
+import type { Hardware } from "../lib/modelFit";
 import { connectionState } from "./theme";
 
 const LOG_LENGTH_LIMIT = 1024 * 100; /* 100KB of log data */
@@ -245,6 +246,10 @@ export async function hubRepoFiles(repo: string): Promise<HubFile[]> {
 
 export async function hubRepoDetail(repo: string): Promise<HubRepoDetail> {
   return hubFetch<HubRepoDetail>(`/api/hub/detail/${repo}`);
+}
+
+export async function hubHardware(): Promise<Hardware> {
+  return hubFetch<Hardware>(`/api/hub/hardware`);
 }
 
 export async function hubDownload(repo: string, file: string): Promise<void> {
