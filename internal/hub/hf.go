@@ -33,7 +33,21 @@ type RepoFile struct {
 var (
 	quantRe      = regexp.MustCompile(`(?i)[-._](i?q\d[a-z0-9_]*|f16|bf16|f32)(?:[-._]|$)`)
 	partSuffixRe = regexp.MustCompile(`-(\d{5})-of-(\d{5})$`)
+
+	// repoNameRe matches HF "org/name" repo IDs. Anything else is rejected
+	// before being interpolated into upstream API URLs.
+	repoNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,95}/[A-Za-z0-9][A-Za-z0-9._-]{0,95}$`)
+
+	// safeFileNameRe constrains GGUF filenames that land on disk and inside
+	// the generated config cmd (argv). No whitespace, quotes, macros, or a
+	// leading "-" so a hostile repo cannot inject arguments.
+	safeFileNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*\.gguf$`)
 )
+
+// ValidRepoName reports whether repo is a well-formed "org/name" HF repo ID.
+func ValidRepoName(repo string) bool {
+	return repoNameRe.MatchString(repo)
+}
 
 // DeriveModelID converts a GGUF filename into a config model ID: strips the
 // .gguf extension and any -NNNNN-of-NNNNN part suffix, lowercased.
@@ -138,7 +152,9 @@ func (m *Manager) ListFiles(ctx context.Context, token, repo, modelsDir string) 
 	}
 	var files []RepoFile
 	for _, s := range info.Siblings {
-		if !strings.HasSuffix(s.Rfilename, ".gguf") {
+		// Only offer filenames safe for disk paths and the generated cmd;
+		// see safeFileNameRe. Downloads accept only names from this listing.
+		if !safeFileNameRe.MatchString(filepath.Base(s.Rfilename)) {
 			continue
 		}
 		downloaded := false

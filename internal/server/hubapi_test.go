@@ -42,6 +42,21 @@ func TestHubAPI_DisabledWithoutManager(t *testing.T) {
 	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 }
 
+func TestHubAPI_RejectsInvalidRepoName(t *testing.T) {
+	srv := newHubTestServer(t, "modelsDir: /tmp\nmodels: {}\n")
+	srv.SetHubManager(hub.NewManager(hub.Options{}))
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/hub/repo/..%2Fadmin/x", nil))
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	w = httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/hub/download",
+		strings.NewReader(`{"repo":"org/name?x=1","file":"a.gguf"}`))
+	srv.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
 func TestHubAPI_DownloadsSnapshot(t *testing.T) {
 	srv := newHubTestServer(t, "modelsDir: /tmp\nmodels: {}\n")
 	srv.SetHubManager(hub.NewManager(hub.Options{}))

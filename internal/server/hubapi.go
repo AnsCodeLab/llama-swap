@@ -66,6 +66,10 @@ func (s *Server) handleHubRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	repo := r.PathValue("repo")
+	if !hub.ValidRepoName(repo) {
+		router.SendResponse(w, r, http.StatusBadRequest, "invalid repo name, expected org/name")
+		return
+	}
 	files, err := s.hub.ListFiles(r.Context(), s.cfg.HubToken, repo, s.cfg.ModelsDir)
 	if err != nil {
 		router.SendResponse(w, r, http.StatusBadGateway, err.Error())
@@ -95,6 +99,10 @@ func (s *Server) handleHubDownload(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Repo == "" || req.File == "" {
 		router.SendResponse(w, r, http.StatusBadRequest, "expected JSON body with repo and file")
+		return
+	}
+	if !hub.ValidRepoName(req.Repo) {
+		router.SendResponse(w, r, http.StatusBadRequest, "invalid repo name, expected org/name")
 		return
 	}
 

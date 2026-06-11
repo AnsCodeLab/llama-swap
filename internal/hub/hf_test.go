@@ -58,6 +58,37 @@ func TestHubManager_ListFiles(t *testing.T) {
 	assert.True(t, files[1].Downloaded)
 }
 
+func TestHubManager_ListFilesSkipsUnsafeNames(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"siblings":[
+			{"rfilename":"good-Q4.gguf","size":1},
+			{"rfilename":"-starts-with-dash.gguf","size":1},
+			{"rfilename":"has space.gguf","size":1},
+			{"rfilename":"dollar${PORT}.gguf","size":1},
+			{"rfilename":"quote\".gguf","size":1}
+		]}`))
+	}))
+	defer ts.Close()
+
+	m := NewManager(Options{BaseURL: ts.URL})
+	files, err := m.ListFiles(context.Background(), "", "org/repo", "")
+	require.NoError(t, err)
+	require.Len(t, files, 1)
+	assert.Equal(t, "good-Q4.gguf", files[0].Name)
+}
+
+func TestHubManager_ValidRepoName(t *testing.T) {
+	assert.True(t, ValidRepoName("bartowski/Qwen-GGUF"))
+	assert.True(t, ValidRepoName("org-1.x/model_name.v2"))
+	assert.False(t, ValidRepoName("noslash"))
+	assert.False(t, ValidRepoName("a/b/c"))
+	assert.False(t, ValidRepoName("../etc/passwd"))
+	assert.False(t, ValidRepoName("org/name?x=1"))
+	assert.False(t, ValidRepoName("org/name#frag"))
+	assert.False(t, ValidRepoName("org/%2e%2e"))
+	assert.False(t, ValidRepoName("-org/name"))
+}
+
 func TestHubManager_DeriveModelID(t *testing.T) {
 	assert.Equal(t, "qwen3-4b-instruct-2507-ud-q4_k_xl", DeriveModelID("Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf"))
 	assert.Equal(t, "big-model-q8_0", DeriveModelID("Big-Model-Q8_0-00001-of-00003.gguf"))
