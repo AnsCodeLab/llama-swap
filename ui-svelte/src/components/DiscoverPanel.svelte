@@ -220,12 +220,12 @@
                 <table class="w-full mt-2">
                   <tbody>
                     {#each repoFiles as file (file.name)}
+                      {@const fit = rateModelFit(file.size, hardware)}
                       <tr>
                         <td class="break-all">{file.name}</td>
                         <td class="w-20">{file.quant}</td>
                         <td class="w-24 text-right">{formatBytes(file.size)}</td>
                         <td class="w-56 text-right whitespace-nowrap">
-                          {@const fit = rateModelFit(file.size, hardware)}
                           {#if fit.level !== "unknown"}
                             <span
                               class="text-xs px-1.5 py-0.5 rounded mr-2
