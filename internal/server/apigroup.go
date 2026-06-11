@@ -179,6 +179,7 @@ const (
 	msgTypeLogData     messageType = "logData"
 	msgTypeMetrics     messageType = "metrics"
 	msgTypeInFlight    messageType = "inflight"
+	msgTypeDownloads   messageType = "downloadStatus"
 )
 
 type messageEnvelope struct {
@@ -237,6 +238,11 @@ func (s *Server) handleAPIEvents(w http.ResponseWriter, r *http.Request) {
 			send(messageEnvelope{Type: msgTypeInFlight, Data: string(j)})
 		}
 	}
+	sendDownloads := func(downloads []shared.DownloadInfo) {
+		if j, err := json.Marshal(downloads); err == nil {
+			send(messageEnvelope{Type: msgTypeDownloads, Data: string(j)})
+		}
+	}
 
 	defer event.On(func(e shared.ProcessStateChangeEvent) { sendModels() })()
 	defer event.On(func(e shared.ConfigFileChangedEvent) { sendModels() })()
@@ -244,6 +250,7 @@ func (s *Server) handleAPIEvents(w http.ResponseWriter, r *http.Request) {
 	defer s.upstreamlog.OnLogData(func(data []byte) { sendLogData("upstream", data) })()
 	defer event.On(func(e ActivityLogEvent) { sendMetrics([]ActivityLogEntry{e.Metrics}) })()
 	defer event.On(func(e shared.InFlightRequestsEvent) { sendInFlight(e.Total) })()
+	defer event.On(func(e shared.DownloadStatusEvent) { sendDownloads(e.Downloads) })()
 
 	// initial payload
 	sendLogData("proxy", s.proxylog.GetHistory())
@@ -251,6 +258,9 @@ func (s *Server) handleAPIEvents(w http.ResponseWriter, r *http.Request) {
 	sendModels()
 	sendMetrics(s.metrics.getMetrics())
 	sendInFlight(int(s.inflight.Current()))
+	if s.hub != nil {
+		sendDownloads(s.hub.Snapshot())
+	}
 
 	for {
 		select {

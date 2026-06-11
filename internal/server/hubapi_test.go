@@ -1,0 +1,53 @@
+package server
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/mostlygeek/llama-swap/internal/config"
+	"github.com/mostlygeek/llama-swap/internal/hub"
+)
+
+func newHubTestServer(t *testing.T, yamlCfg string) *Server {
+	t.Helper()
+	cfg, err := config.LoadConfigFromReader(strings.NewReader(yamlCfg))
+	require.NoError(t, err)
+	muxLog, proxyLog, upstreamLog := NewLoggers("none")
+	srv, err := New(cfg, muxLog, proxyLog, upstreamLog, nil, BuildInfo{})
+	require.NoError(t, err)
+	t.Cleanup(func() { srv.Shutdown(time.Second) })
+	return srv
+}
+
+func TestHubAPI_DisabledWithoutModelsDir(t *testing.T) {
+	srv := newHubTestServer(t, "models: {}\n")
+	srv.SetHubManager(hub.NewManager(hub.Options{}))
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/hub/popular", nil))
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+	assert.Contains(t, w.Body.String(), "modelsDir")
+}
+
+func TestHubAPI_DisabledWithoutManager(t *testing.T) {
+	srv := newHubTestServer(t, "modelsDir: /tmp\nmodels: {}\n")
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/hub/downloads", nil))
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+}
+
+func TestHubAPI_DownloadsSnapshot(t *testing.T) {
+	srv := newHubTestServer(t, "modelsDir: /tmp\nmodels: {}\n")
+	srv.SetHubManager(hub.NewManager(hub.Options{}))
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/hub/downloads", nil))
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "[]", strings.TrimSpace(w.Body.String()))
+}
