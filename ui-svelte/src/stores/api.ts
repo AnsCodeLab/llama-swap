@@ -8,6 +8,9 @@ import type {
   ReqRespCapture,
   InFlightStats,
   PerformanceResponse,
+  DownloadInfo,
+  HubRepo,
+  HubFile,
 } from "../lib/types";
 import { connectionState } from "./theme";
 
@@ -15,6 +18,7 @@ const LOG_LENGTH_LIMIT = 1024 * 100; /* 100KB of log data */
 
 // Stores
 export const models = writable<Model[]>([]);
+export const downloads = writable<DownloadInfo[]>([]);
 export const proxyLogs = writable<string>("");
 export const upstreamLogs = writable<string>("");
 export const metrics = writable<ActivityLogEntry[]>([]);
@@ -98,6 +102,11 @@ export function enableAPIEvents(enabled: boolean): void {
           case "inflight": {
             const stats = JSON.parse(message.data) as InFlightStats;
             inFlightRequests.set(stats.total ?? 0);
+            break;
+          }
+          case "downloadStatus": {
+            const newDownloads = JSON.parse(message.data) as DownloadInfo[] | null;
+            downloads.set(newDownloads ?? []);
             break;
           }
         }
@@ -204,6 +213,57 @@ export async function getCapture(id: number): Promise<ReqRespCapture | null> {
     console.error("Failed to fetch capture:", error);
     return null;
   }
+}
+
+// HubDisabledError is thrown when the server reports the hub feature is off
+// (modelsDir not configured).
+export class HubDisabledError extends Error {}
+
+async function hubFetch<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, init);
+  if (response.status === 503) {
+    throw new HubDisabledError(await response.text());
+  }
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  return (await response.json()) as T;
+}
+
+export async function hubPopular(): Promise<HubRepo[]> {
+  return hubFetch<HubRepo[]>("/api/hub/popular");
+}
+
+export async function hubSearch(query: string): Promise<HubRepo[]> {
+  return hubFetch<HubRepo[]>(`/api/hub/search?q=${encodeURIComponent(query)}`);
+}
+
+export async function hubRepoFiles(repo: string): Promise<HubFile[]> {
+  return hubFetch<HubFile[]>(`/api/hub/repo/${repo}`);
+}
+
+export async function hubDownload(repo: string, file: string): Promise<void> {
+  await hubFetch(`/api/hub/download`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repo, file }),
+  });
+}
+
+export async function hubCancelDownload(id: string): Promise<void> {
+  await hubFetch(`/api/hub/download/cancel`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
+  });
+}
+
+export async function hubDeleteModel(modelId: string): Promise<void> {
+  await hubFetch(`/api/hub/delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ modelId }),
+  });
 }
 
 export async function fetchPerformance(after?: string): Promise<PerformanceResponse | null> {

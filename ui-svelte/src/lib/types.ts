@@ -91,8 +91,35 @@ export interface PerformanceResponse {
 }
 
 export interface APIEventEnvelope {
-  type: "modelStatus" | "logData" | "metrics" | "inflight" | "perfsys" | "perfgpu";
+  type: "modelStatus" | "logData" | "metrics" | "inflight" | "perfsys" | "perfgpu" | "downloadStatus";
   data: string;
+}
+
+export type DownloadState = "downloading" | "completed" | "error" | "cancelled";
+
+export interface DownloadInfo {
+  id: string;
+  repo: string;
+  file: string;
+  modelId: string;
+  state: DownloadState;
+  totalBytes: number;
+  downloadedBytes: number;
+  speedBps: number;
+  error?: string;
+}
+
+export interface HubRepo {
+  id: string;
+  downloads: number;
+  likes: number;
+}
+
+export interface HubFile {
+  name: string;
+  size: number;
+  quant: string;
+  downloaded: boolean;
 }
 
 export interface HistogramData {
