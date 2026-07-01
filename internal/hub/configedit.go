@@ -8,9 +8,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"gopkg.in/yaml.v3"
 )
+
+// configEditMu serializes editConfig's read-modify-write cycle across the
+// whole process. Without it, concurrent downloads completing around the
+// same time race on the same config file: each reads the pre-edit version,
+// applies its own change in memory, then writes back — last writer wins and
+// silently discards every other concurrent edit, including unrelated
+// pre-existing model entries the racing writer's stale read didn't have.
+var configEditMu sync.Mutex
 
 // AddModelEntry appends a model entry under the top-level models: mapping,
 // preserving comments and formatting elsewhere in the file. The cmd is
@@ -59,6 +68,9 @@ func strNode(value string, style yaml.Style) *yaml.Node {
 // editConfig loads the raw YAML document, locates (or creates) the models:
 // mapping, applies fn, and writes the document back atomically.
 func editConfig(configPath string, fn func(models *yaml.Node) error) error {
+	configEditMu.Lock()
+	defer configEditMu.Unlock()
+
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return err

@@ -3,6 +3,7 @@ package hub
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -85,4 +86,37 @@ func TestConfigEdit_RemoveModelEntryNotFound(t *testing.T) {
 	found, err := RemoveModelEntry(path, "nope")
 	require.NoError(t, err)
 	assert.False(t, found)
+}
+
+// TestConfigEdit_ConcurrentAddModelEntry guards against a regression where
+// concurrent AddModelEntry calls (e.g. two hub downloads finishing around
+// the same time) raced on editConfig's read-modify-write cycle: each read
+// the pre-edit file, applied its own change in memory, then wrote back —
+// last writer wins, silently discarding every other concurrent edit
+// including unrelated pre-existing model entries the stale read never saw.
+func TestConfigEdit_ConcurrentAddModelEntry(t *testing.T) {
+	path := writeTestConfig(t)
+
+	names := []string{"new-a", "new-b", "new-c", "new-d", "new-e"}
+	var wg sync.WaitGroup
+	for _, n := range names {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			assert.NoError(t, AddModelEntry(path, name, name,
+				"llama-server --port ${PORT} -m /models/"+name+".gguf"))
+		}(n)
+	}
+	wg.Wait()
+
+	out, err := os.ReadFile(path)
+	require.NoError(t, err)
+	s := string(out)
+
+	// the pre-existing hand-written entry must survive every concurrent edit
+	assert.Contains(t, s, `"qwen3-4b":`)
+	assert.Contains(t, s, "# hand-written entry, comments must survive edits")
+	for _, n := range names {
+		assert.Contains(t, s, `"`+n+`":`, "entry %q lost to a concurrent-write race", n)
+	}
 }
