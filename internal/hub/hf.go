@@ -18,11 +18,12 @@ const DefaultBaseURL = "https://huggingface.co"
 
 // RepoSummary is one HF repo in popular/search results.
 type RepoSummary struct {
-	ID           string `json:"id"`
-	Downloads    int64  `json:"downloads"`
-	Likes        int64  `json:"likes"`
-	LastModified string `json:"lastModified"`
-	PipelineTag  string `json:"pipelineTag"`
+	ID           string   `json:"id"`
+	Downloads    int64    `json:"downloads"`
+	Likes        int64    `json:"likes"`
+	LastModified string   `json:"lastModified"`
+	PipelineTag  string   `json:"pipelineTag"`
+	Tags         []string `json:"tags"`
 }
 
 // RepoFile is one GGUF file inside an HF repo.
@@ -129,28 +130,33 @@ func (m *Manager) Search(ctx context.Context, token, query string, limit int) ([
 	q.Set("sort", "downloads")
 	q.Set("direction", "-1")
 	q.Set("limit", fmt.Sprintf("%d", limit))
-	q["expand[]"] = []string{"downloads", "likes", "pipeline_tag", "lastModified"}
+	q["expand[]"] = []string{"downloads", "likes", "pipeline_tag", "lastModified", "tags"}
 	if query != "" {
 		q.Set("search", query)
 	}
 	var raw []struct {
-		ID           string `json:"id"`
-		Downloads    int64  `json:"downloads"`
-		Likes        int64  `json:"likes"`
-		LastModified string `json:"lastModified"`
-		PipelineTag  string `json:"pipeline_tag"`
+		ID           string   `json:"id"`
+		Downloads    int64    `json:"downloads"`
+		Likes        int64    `json:"likes"`
+		LastModified string   `json:"lastModified"`
+		PipelineTag  string   `json:"pipeline_tag"`
+		Tags         []string `json:"tags"`
 	}
 	if err := m.hfGet(ctx, token, "/api/models", q, &raw); err != nil {
 		return nil, err
 	}
 	repos := make([]RepoSummary, 0, len(raw))
 	for _, r := range raw {
+		if r.Tags == nil {
+			r.Tags = []string{}
+		}
 		repos = append(repos, RepoSummary{
 			ID:           r.ID,
 			Downloads:    r.Downloads,
 			Likes:        r.Likes,
 			LastModified: r.LastModified,
 			PipelineTag:  r.PipelineTag,
+			Tags:         r.Tags,
 		})
 	}
 	return repos, nil

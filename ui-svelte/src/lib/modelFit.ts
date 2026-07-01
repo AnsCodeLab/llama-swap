@@ -57,6 +57,14 @@ export function rateModelFit(sizeBytes: number, hw: Hardware | null): ModelFit {
   };
 }
 
+const TOOL_TAGS = new Set(["tool-calling", "function-calling", "text-generation-inference:tools"]);
+
+// Heuristic only: relies on HF tags set by the uploader, so a model can
+// support tool calling without being tagged for it.
+export function supportsToolCalling(tags: string[]): boolean {
+  return tags.some((t) => TOOL_TAGS.has(t.toLowerCase()));
+}
+
 export function typeHint(pipelineTag: string): string {
   switch (pipelineTag) {
     case "feature-extraction":

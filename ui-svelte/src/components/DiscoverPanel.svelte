@@ -2,7 +2,7 @@
   import { hubPopular, hubSearch, hubRepoFiles, hubDownload, hubHardware, downloads, HubDisabledError } from "../stores/api";
   import RepoDetailDialog from "./RepoDetailDialog.svelte";
   import GgufGuideDialog from "./GgufGuideDialog.svelte";
-  import { rateModelFit, typeHint, type Hardware } from "../lib/modelFit";
+  import { rateModelFit, typeHint, supportsToolCalling, type Hardware } from "../lib/modelFit";
   import type { HubRepo, HubFile } from "../lib/types";
 
   let query = $state("");
@@ -197,6 +197,14 @@
               {#if typeHint(repo.pipelineTag)}
                 <span class="px-1.5 py-0.5 rounded border border-amber-500/50 text-amber-700 dark:text-amber-400">
                   {typeHint(repo.pipelineTag)}
+                </span>
+              {/if}
+              {#if supportsToolCalling(repo.tags)}
+                <span
+                  class="px-1.5 py-0.5 rounded border border-teal-500/50 text-teal-700 dark:text-teal-400"
+                  title="Tagged by the uploader as supporting tool/function calling. Not verified by llama-swap — check the model card."
+                >
+                  tool calling
                 </span>
               {/if}
               {#if repo.lastModified}

@@ -115,6 +115,7 @@ export interface HubRepo {
   likes: number;
   lastModified: string;
   pipelineTag: string;
+  tags: string[];
 }
 
 export interface HubRepoDetail {
