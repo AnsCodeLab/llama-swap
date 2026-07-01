@@ -60,6 +60,7 @@ Built in Go for performance and simplicity, llama-swap has zero dependencies and
   - Docker and Podman support using `cmd` and `cmdStop` together
   - Preload models on startup with `hooks` ([#235](https://github.com/mostlygeek/llama-swap/pull/235))
   - Apply filters to requests to control inference with `stripParams`, `setParams` and `setParamsByID`
+- ✅ [Model Discovery](#model-discovery) - search, rate, and download GGUF models from Hugging Face directly in the Web UI
 
 ### Web UI
 
@@ -82,6 +83,19 @@ Manually load and unload models:
 Real time log streaming:
 
 <img width="1107" height="559" alt="image" src="https://github.com/user-attachments/assets/39669a10-cff2-409e-836a-5bad8bd0140c" />
+
+### Model Discovery
+
+The Web UI's Discover tab lets you find and download GGUF models from Hugging Face without leaving llama-swap:
+
+- Search or browse popular GGUF repos, sortable by downloads, likes, or last updated
+- Per-file hardware-fit rating (Great / Good / Tight / Too large) estimated against your machine's RAM and VRAM
+- A tool-calling badge for models the uploader has tagged as supporting tool/function calling
+- One-click download with resume support for interrupted transfers
+- Automatically adds a ready-to-use model entry to `config.yaml` when the download finishes
+- A Downloads panel to track progress, cancel active downloads, and clear finished/errored entries
+
+Enable it by setting `modelsDir` to an absolute path in `config.yaml`; downloaded GGUFs are saved there. Set `hubToken` to a Hugging Face access token to download gated or private repos.
 
 ## Installation
 
