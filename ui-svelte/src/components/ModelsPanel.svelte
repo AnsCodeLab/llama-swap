@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { models, loadModel, unloadAllModels, unloadSingleModel, downloads, hubCancelDownload, hubDeleteModel } from "../stores/api";
+  import { models, loadModel, unloadAllModels, unloadSingleModel, downloads, hubCancelDownload, hubClearDownloads, hubDeleteModel } from "../stores/api";
   import { isNarrow } from "../stores/theme";
   import { persistentStore } from "../stores/persistent";
   import type { Model } from "../lib/types";
@@ -9,6 +9,11 @@
   let deleteError = $state("");
 
   let activeDownloads = $derived($downloads.filter((d) => d.state !== "completed"));
+  let hasFinishedDownloads = $derived(activeDownloads.some((d) => d.state !== "downloading"));
+
+  async function handleClearDownloads(): Promise<void> {
+    await hubClearDownloads();
+  }
 
   async function handleDelete(model: Model): Promise<void> {
     if (!confirm(`Delete "${model.id}"?\n\nThis removes its GGUF file(s) from the models directory and its entry from the configuration file.`)) {
@@ -176,7 +181,12 @@
       <p class="text-red-500">{deleteError}</p>
     {/if}
     {#if activeDownloads.length > 0}
-      <h3 class="mb-2">Downloads</h3>
+      <div class="flex justify-between items-center mb-2">
+        <h3>Downloads</h3>
+        {#if hasFinishedDownloads}
+          <button class="btn btn--sm" onclick={handleClearDownloads}>Clear</button>
+        {/if}
+      </div>
       {#each activeDownloads as d (d.id)}
         <div class="mb-2 p-2 border border-gray-200 dark:border-white/10 rounded">
           <div class="flex justify-between items-center">

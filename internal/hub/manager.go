@@ -31,11 +31,13 @@ type Manager struct {
 
 	mu        sync.Mutex
 	downloads map[string]*download
+	nextSeq   int64
 }
 
 type download struct {
 	info   shared.DownloadInfo
 	cancel func()
+	seq    int64 // insertion order, so the UI list doesn't reorder on every update
 }
 
 func NewManager(opts Options) *Manager {

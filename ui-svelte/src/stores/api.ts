@@ -268,6 +268,10 @@ export async function hubCancelDownload(id: string): Promise<void> {
   });
 }
 
+export async function hubClearDownloads(): Promise<void> {
+  await hubFetch(`/api/hub/downloads/clear`, { method: "POST" });
+}
+
 export async function hubDeleteModel(modelId: string): Promise<void> {
   await hubFetch(`/api/hub/delete`, {
     method: "POST",

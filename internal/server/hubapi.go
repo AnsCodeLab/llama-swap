@@ -187,6 +187,17 @@ func (s *Server) handleHubDownloadCancel(w http.ResponseWriter, r *http.Request)
 	sendJSON(w, map[string]string{"msg": "ok"})
 }
 
+// handleHubDownloadsClear removes completed/cancelled/errored download jobs
+// from the list so the UI can dismiss them. Active downloads are untouched.
+func (s *Server) handleHubDownloadsClear(w http.ResponseWriter, r *http.Request) {
+	if s.hub == nil {
+		router.SendResponse(w, r, http.StatusServiceUnavailable, "hub downloads are disabled")
+		return
+	}
+	s.hub.ClearFinished()
+	sendJSON(w, map[string]string{"msg": "ok"})
+}
+
 // handleHubDelete unloads a model, deletes its GGUF files (only those inside
 // modelsDir), removes its config entry, and triggers a config reload.
 func (s *Server) handleHubDelete(w http.ResponseWriter, r *http.Request) {

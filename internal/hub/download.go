@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/shirou/gopsutil/v4/disk"
@@ -63,7 +64,9 @@ func (m *Manager) StartDownload(opts DownloadOpts) (string, error) {
 			TotalBytes: total,
 		},
 		cancel: cancel,
+		seq:    m.nextSeq,
 	}
+	m.nextSeq++
 	m.downloads[opts.ModelID] = d
 	go m.runDownload(ctx, d, opts)
 	m.emitLocked()
@@ -82,24 +85,47 @@ func (m *Manager) Cancel(id string) bool {
 	return true
 }
 
-// Snapshot returns the current state of every download job.
+// ClearFinished removes every download job that is no longer active
+// (completed, cancelled, or errored) so the UI list can be dismissed.
+// Jobs still downloading are left untouched.
+func (m *Manager) ClearFinished() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for id, d := range m.downloads {
+		if d.info.State != "downloading" {
+			delete(m.downloads, id)
+		}
+	}
+	m.emitLocked()
+}
+
+// Snapshot returns the current state of every download job, ordered by when
+// each job started.
 func (m *Manager) Snapshot() []shared.DownloadInfo {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	out := make([]shared.DownloadInfo, 0, len(m.downloads))
+	return m.snapshotLocked()
+}
+
+// snapshotLocked builds the download list sorted by insertion order; callers
+// must hold m.mu. Go map iteration order is randomized, so without this sort
+// the list would visibly reorder on every progress tick.
+func (m *Manager) snapshotLocked() []shared.DownloadInfo {
+	list := make([]*download, 0, len(m.downloads))
 	for _, d := range m.downloads {
-		out = append(out, d.info)
+		list = append(list, d)
+	}
+	sort.Slice(list, func(i, j int) bool { return list[i].seq < list[j].seq })
+	out := make([]shared.DownloadInfo, len(list))
+	for i, d := range list {
+		out[i] = d.info
 	}
 	return out
 }
 
 // emitLocked publishes a full snapshot; callers must hold m.mu.
 func (m *Manager) emitLocked() {
-	out := make([]shared.DownloadInfo, 0, len(m.downloads))
-	for _, d := range m.downloads {
-		out = append(out, d.info)
-	}
-	event.Emit(shared.DownloadStatusEvent{Downloads: out})
+	event.Emit(shared.DownloadStatusEvent{Downloads: m.snapshotLocked()})
 }
 
 func (m *Manager) setState(d *download, state, errMsg string) {
