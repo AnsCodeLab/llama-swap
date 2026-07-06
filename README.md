@@ -53,7 +53,8 @@ Built in Go for performance and simplicity, llama-swap has zero dependencies and
     - `GET /logs/stream/{model_id}` streams logs for one model (including IDs with slashes, like `author/model`).
   - `/health` - just returns "OK"
   - `/metrics` - system and GPU metrics for prometheus
-- ✅ API Key support - define keys to restrict access to API endpoints
+- ✅ API Key support - define keys to restrict access to API endpoints, generate and manage them from the UI
+- ✅ Username/password protection - lock down the entire UI and API with HTTP Basic Auth
 - ✅ Customizable
   - Run concurrent models with a custom DSL swap matrix ([#643](https://github.com/mostlygeek/llama-swap/issues/643))
   - Automatic unloading of models after timeout by setting a `ttl`

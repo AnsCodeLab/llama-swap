@@ -139,7 +139,8 @@ macros:
 # apiKeys: require an API key when making requests to inference endpoints
 # - optional, default: []
 # - when empty (the default) authorization will not be checked as llama-swap is default-allow
-# - each key is a non-empty string
+# - each entry is either a bare string, or a mapping with an optional label/createdAt
+# - the Settings page in the UI can generate, label, and revoke these at runtime
 apiKeys:
   - "sk-hunter2"
   # tip, one liner: printf "sk-%s\n" "$(head -c 48 /dev/urandom | base64 )"
@@ -148,6 +149,25 @@ apiKeys:
   # use environment variable macros to keep secrets out of the config
   - "${env.API_KEY_1}"
   - "${env.API_KEY_2}"
+
+  # entries generated from the UI look like this; id is used for deletion,
+  # label/createdAt are display-only
+  - id: "a1b2c3d4e5f6"
+    key: "sk-...."
+    label: "CI pipeline"
+    createdAt: "2026-07-06T10:00:00Z"
+
+# auth: protect every route llama-swap serves (the UI dashboard, health,
+# metrics, and inference endpoints alike) with HTTP Basic Auth.
+# - optional, default: disabled
+# - username and password must both be set, or both left empty to disable
+# - a request is admitted if it presents either a valid apiKeys entry OR
+#   valid auth credentials — existing apiKeys-based API clients are
+#   unaffected by turning this on
+# - the Settings page in the UI can configure this at runtime
+auth:
+  username: "admin"
+  password: "hunter2"
 
 # models: a dictionary of model configurations
 # - required
