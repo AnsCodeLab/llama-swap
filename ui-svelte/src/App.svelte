@@ -8,6 +8,7 @@
   import Performance from "./routes/Performance.svelte";
   import Playground from "./routes/Playground.svelte";
   import PlaygroundStub from "./routes/PlaygroundStub.svelte";
+  import Settings from "./routes/Settings.svelte";
   import { enableAPIEvents } from "./stores/api";
   import { initScreenWidth, initSystemThemeListener, isDarkMode, appTitle, connectionState } from "./stores/theme";
   import { currentRoute } from "./stores/route";
@@ -18,6 +19,7 @@
     "/logs": LogViewer,
     "/activity": Activity,
     "/performance": Performance,
+    "/settings": Settings,
     "*": PlaygroundStub,
   };
 
