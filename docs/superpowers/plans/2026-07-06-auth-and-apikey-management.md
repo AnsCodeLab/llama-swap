@@ -1236,9 +1236,9 @@ func TestServer_GlobalAuthMiddleware(t *testing.T) {
 Run: `go test ./internal/server/... -run TestServer_GlobalAuthMiddleware -v`
 Expected: FAIL to compile — `CreateGlobalAuthMiddleware` is undefined.
 
-- [ ] **Step 3: Replace `CreateAuthMiddleware` in `auth.go`**
+- [ ] **Step 3: Add `CreateGlobalAuthMiddleware` in `auth.go`, alongside the existing `CreateAuthMiddleware`**
 
-In `internal/server/auth.go`, replace the entire `CreateAuthMiddleware` function (and its doc comment) with:
+In `internal/server/auth.go`, add this new function after the existing `CreateAuthMiddleware` function — do **not** remove or modify `CreateAuthMiddleware` in this task. It still has a caller in `server.go` (`routes()`'s `apiChain`); Task 7 removes both the old function and its caller together when it rewires `routes()` to use `CreateGlobalAuthMiddleware` instead. Keeping both functions side by side for one task means this commit compiles and every test passes, instead of leaving the package in a broken state until Task 7 lands.
 
 ```go
 // CreateGlobalAuthMiddleware returns middleware that gates every request
@@ -1289,7 +1289,7 @@ func CreateGlobalAuthMiddleware(cfg config.Config) chain.Middleware {
 }
 ```
 
-Add `"crypto/subtle"` to the import block at the top of the file:
+Add `"crypto/subtle"` to the import block at the top of the file (keep the existing imports — `CreateAuthMiddleware` still needs them):
 
 ```go
 import (
@@ -1304,35 +1304,30 @@ import (
 )
 ```
 
-- [ ] **Step 4: Delete the old `TestServer_AuthMiddleware` test**
-
-In `internal/server/auth_test.go`, delete the entire `TestServer_AuthMiddleware` function (it tested `CreateAuthMiddleware`, which no longer exists — superseded by `TestServer_GlobalAuthMiddleware` added in Step 1).
-
-- [ ] **Step 5: Run the tests to verify they pass**
+- [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `go test ./internal/server/... -run TestServer_GlobalAuthMiddleware -v`
 Expected: PASS (all 8 subtests).
 
-- [ ] **Step 6: Run the full server package test suite**
+- [ ] **Step 5: Run the full server package test suite**
 
 Run: `go test ./internal/server/... -v`
-Expected: FAIL — `internal/server/server.go` still calls `CreateAuthMiddleware`, which no longer exists. This is expected; Task 7 fixes the call site. Confirm the *only* failure is a compile error referencing `CreateAuthMiddleware` in `server.go`, not a logic failure elsewhere.
+Expected: PASS — both `CreateAuthMiddleware` (still wired into `server.go`'s `apiChain`, untouched by this task) and the new `CreateGlobalAuthMiddleware` (not yet wired anywhere) coexist. No regressions in any existing test.
 
-- [ ] **Step 7: gofmt and commit**
+- [ ] **Step 6: gofmt and commit**
 
 ```bash
 gofmt -w internal/server/auth.go internal/server/auth_test.go
 git add internal/server/auth.go internal/server/auth_test.go
 git commit -m "$(cat <<'EOF'
-server: replace CreateAuthMiddleware with CreateGlobalAuthMiddleware
+server: add CreateGlobalAuthMiddleware alongside CreateAuthMiddleware
 
-Same API-key extraction as before, plus an alternate HTTP Basic Auth
-username/password check using a constant-time comparison. This will be
-wired at the outermost layer of the handler chain (Task 7) so it covers
-every route, not just the modelChain/apiChain routes it used to.
-
-Known-broken until Task 7: server.go still calls the removed
-CreateAuthMiddleware, so `go build ./...` fails on this commit alone.
+Same API-key extraction as the existing CreateAuthMiddleware, plus an
+alternate HTTP Basic Auth username/password check using a constant-time
+comparison. Added side by side with the old function for now — Task 7
+wires this at the outermost layer of the handler chain (so it covers
+every route, not just modelChain/apiChain) and removes the now-unused
+CreateAuthMiddleware in the same commit that removes its last caller.
 EOF
 )"
 ```
@@ -1762,7 +1757,7 @@ func TestServer_SettingsRoutes_Registered(t *testing.T) {
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `go test ./internal/server/... -run 'TestServer_GlobalAuth|TestServer_SettingsRoutes' -v`
-Expected: FAIL — either a compile error (package still references the removed `CreateAuthMiddleware`) or, once that's fixed, 404s for `/api/settings/*` and no 401 for `/ui/`/`/metrics`/`/health`.
+Expected: FAIL — `routes()` still wires the old `apiChain`/`authMW` setup, so `/ui/`, `/metrics`, and `/health` return 200 with no auth check, and `/api/settings/*` 404s (not yet registered).
 
 - [ ] **Step 3: Rewrite `routes()` in `server.go`**
 
@@ -1868,17 +1863,23 @@ func (s *Server) routes() {
 
 This removes the `apiChain` variable entirely: it previously existed only to apply `authMW`, which is now handled once, globally, at the outer `s.handler` layer, so every route that used to be wrapped in `apiChain.ThenFunc(...)` is now registered directly with plain `mux.HandleFunc(...)`.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [ ] **Step 4: Remove the now-unused `CreateAuthMiddleware` and its test**
+
+`routes()` no longer calls `CreateAuthMiddleware` — Task 5 added `CreateGlobalAuthMiddleware` alongside it rather than replacing it, specifically so this removal could happen in the same commit as its last caller disappearing. In `internal/server/auth.go`, delete the entire `CreateAuthMiddleware` function (and its doc comment) — everything from the comment block through its closing `}`, i.e. the function Task 5 left untouched. `extractAPIKey` and `CreateGlobalAuthMiddleware` remain.
+
+In `internal/server/auth_test.go`, delete the entire `TestServer_AuthMiddleware` function — it tested `CreateAuthMiddleware`, which no longer exists, and is superseded by `TestServer_GlobalAuthMiddleware` (added in Task 5).
+
+- [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `go test ./internal/server/... -run 'TestServer_GlobalAuth|TestServer_SettingsRoutes' -v`
 Expected: PASS (all 3 new tests, including the sub-checks in `TestServer_GlobalAuth_ProtectsUIAndMetrics`).
 
-- [ ] **Step 5: Run the full server package test suite**
+- [ ] **Step 6: Run the full server package test suite**
 
 Run: `go test ./internal/server/... -v`
-Expected: PASS — this is the first point since Task 5 where the whole package compiles and passes again; confirm no regressions in any pre-existing test (`TestServer_CORSPreflight`, `TestServer_Health`, `TestServer_Unload`, etc.).
+Expected: PASS — confirm no regressions in any pre-existing test (`TestServer_CORSPreflight`, `TestServer_Health`, `TestServer_Unload`, etc.), and that removing `CreateAuthMiddleware`/`TestServer_AuthMiddleware` in Step 4 left no dangling references.
 
-- [ ] **Step 6: Wire `configPath` through `llama-swap.go`**
+- [ ] **Step 7: Wire `configPath` through `llama-swap.go`**
 
 In `llama-swap.go`, right after line 160 (`initialSrv.SetHubManager(hubManager)`), add:
 
@@ -1892,31 +1893,32 @@ Right after line 216 (`newSrv.SetHubManager(hubManager)`, inside the `reload` cl
 		newSrv.SetConfigPath(configPath)
 ```
 
-- [ ] **Step 7: Build the whole project to confirm `llama-swap.go` compiles**
+- [ ] **Step 8: Build the whole project to confirm `llama-swap.go` compiles**
 
 Run: `go build ./...`
 Expected: succeeds with no errors.
 
-- [ ] **Step 8: Run `make test-dev`**
+- [ ] **Step 9: Run `make test-dev`**
 
 Run: `make test-dev`
 Expected: `go test` and `staticcheck` both pass with no errors across the whole repo.
 
-- [ ] **Step 9: gofmt and commit**
+- [ ] **Step 10: gofmt and commit**
 
 ```bash
-gofmt -w internal/server/server.go internal/server/server_test.go llama-swap.go
-git add internal/server/server.go internal/server/server_test.go llama-swap.go
+gofmt -w internal/server/server.go internal/server/server_test.go internal/server/auth.go internal/server/auth_test.go llama-swap.go
+git add internal/server/server.go internal/server/server_test.go internal/server/auth.go internal/server/auth_test.go llama-swap.go
 git commit -m "$(cat <<'EOF'
 server: apply global auth to every route, wire up settings routes
 
 CreateGlobalAuthMiddleware now wraps the entire handler (UI, metrics,
 health, inference, everything) instead of just modelChain/apiChain, so
 apiChain's only job (applying authMW) is gone — routes it used to wrap
-are now registered directly on the mux. Also registers the new
-/api/settings/* routes and threads configPath through both server.New
-call sites in llama-swap.go so Settings-driven writes know where
-config.yaml lives.
+are now registered directly on the mux. The now-unused CreateAuthMiddleware
+is removed in this same commit, alongside its superseded test. Also
+registers the new /api/settings/* routes and threads configPath through
+both server.New call sites in llama-swap.go so Settings-driven writes
+know where config.yaml lives.
 EOF
 )"
 ```
