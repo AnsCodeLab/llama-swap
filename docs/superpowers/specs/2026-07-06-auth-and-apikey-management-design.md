@@ -1,11 +1,11 @@
-# Username/Password Protection + API Key Management — Design
+# Username/Password Protection + API Key Management: Design
 
 Date: 2026-07-06
 Status: Approved
 
 ## Goal
 
-Today, `apiKeys` in `config.yaml` gates only inference/API routes — the `/ui/`
+Today, `apiKeys` in `config.yaml` gates only inference/API routes: the `/ui/`
 dashboard, `/metrics`, `/health`, etc. have no auth at all, even when
 `apiKeys` is configured. Add:
 
@@ -32,7 +32,7 @@ dashboard, `/metrics`, `/health`, etc. have no auth at all, even when
 - **Reuse and share the config-file-editing mutex.** `internal/hub/configedit.go`
   already has a mutex-protected read-modify-write-encode-atomic-write cycle
   for `config.yaml` (added after a real data-loss bug from two independent
-  unguarded writers — see commit `9fe5619`). The new Settings-driven writes
+  unguarded writers: see commit `9fe5619`). The new Settings-driven writes
   (auth credentials, API key add/remove) must go through that same shared
   mutex and atomic-write path, not a second independent one, or the same class
   of race reappears. The generic parts (mutex, atomic write, root-mapping
@@ -59,7 +59,7 @@ apiKeys:
 - `RequiredAPIKeys` changes from `[]string` to `[]APIKeyEntry` where
   `APIKeyEntry struct { Key, Label, CreatedAt string }`, with a custom
   `UnmarshalYAML` on `APIKeyEntry` that accepts either a scalar string node
-  (legacy — becomes `{Key: value}`) or a mapping node (decoded normally).
+  (legacy: becomes `{Key: value}`) or a mapping node (decoded normally).
   Existing validation (non-empty, no spaces) applies to `.Key`.
 - `docs/configuration.md` and `config-schema.json` updated for both new
   shapes.
@@ -71,20 +71,20 @@ Move `internal/hub/configedit.go`'s generic pieces (`configEditMu`,
 into `internal/config/edit.go`. `hub.AddModelEntry`/`RemoveModelEntry` become
 thin callers of `config.EditConfig(...)`. New functions in the same package:
 
-- `AddAPIKey(configPath, label string) (plaintextKey string, err error)` —
+- `AddAPIKey(configPath, label string) (plaintextKey string, err error)`:
   generates `"sk-" + base64url(32 random bytes via crypto/rand)`, a separate
   non-secret `id` (12 hex chars, also `crypto/rand`), appends
   `{key, label, createdAt: now}` under `apiKeys:`, returns the plaintext key
   once.
-- `RemoveAPIKey(configPath, id string) (bool, error)` — removes by `id`, not
+- `RemoveAPIKey(configPath, id string) (bool, error)`: removes by `id`, not
   by key value, so the secret never has to appear in a request path/URL or
   server access log.
-- `SetAuthCredentials(configPath, username, password string) error` — writes
+- `SetAuthCredentials(configPath, username, password string) error`: writes
   (or clears, if both empty) the top-level `auth:` mapping.
 
 All three go through the one shared mutex/atomic-write path used by the hub
 feature; the existing config-file watcher picks up the change and hot-reloads
-the server automatically — no new reload mechanism needed.
+the server automatically: no new reload mechanism needed.
 
 ## Backend auth middleware
 
@@ -110,7 +110,7 @@ s.handler = chain.New(
 4. Else → `401` + `WWW-Authenticate: Basic realm="llama-swap"`.
 
 This now covers `/ui/`, `/metrics`, `/health`, `/favicon.ico`, `/`, and every
-other route — the per-chain `authMW` applications in `routes()` are removed
+other route: the per-chain `authMW` applications in `routes()` are removed
 since the global middleware supersedes them.
 
 ## API endpoints (`internal/server/settingsapi.go`, new)
@@ -125,7 +125,7 @@ pattern:
 - `GET /api/settings/apikeys` → `[{ id, label, createdAt, maskedKey }]`,
   `maskedKey` like `sk-ab12…wxyz`.
 - `POST /api/settings/apikeys` → body `{ label? }`; calls `config.AddAPIKey`,
-  returns `{ id, label, createdAt, key }` — full `key` only in this one
+  returns `{ id, label, createdAt, key }`: full `key` only in this one
   response.
 - `DELETE /api/settings/apikeys/{id}` → calls `config.RemoveAPIKey`.
 
@@ -147,10 +147,10 @@ pattern:
 
 ## Testing
 
-- Go: `internal/server/auth_test.go` — API-key-valid, Basic-Auth-valid, both
+- Go: `internal/server/auth_test.go`: API-key-valid, Basic-Auth-valid, both
   invalid, both unset (pass-through), OPTIONS preflight bypass,
   constant-time comparison used for password check.
-- Go: `internal/config` — back-compat parsing (bare-string vs struct
+- Go: `internal/config`: back-compat parsing (bare-string vs struct
   `apiKeys` entries), `AddAPIKey`/`RemoveAPIKey`/`SetAuthCredentials`
   round-trips, concurrent-edit test analogous to the existing hub
   regression test (two concurrent API-key adds don't drop each other's

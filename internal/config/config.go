@@ -643,7 +643,7 @@ func LoadConfigFromReader(r io.Reader) (Config, error) {
 		}
 	}
 
-	// auth.username and auth.password must both be set or both empty —
+	// auth.username and auth.password must both be set or both empty:
 	// a lone one is almost certainly a typo and would otherwise silently
 	// lock everyone out (password set, username empty never matches) or
 	// leave the server unprotected (username set, password empty never

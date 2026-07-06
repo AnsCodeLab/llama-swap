@@ -14,7 +14,7 @@ import (
 // process. Without it, concurrent callers (e.g. a hub download completing at
 // the same time a Settings API key is generated) race on the same config
 // file: each reads the pre-edit version, applies its own change in memory,
-// then writes back — last writer wins and silently discards every other
+// then writes back, so last writer wins and silently discards every other
 // concurrent edit, including unrelated pre-existing entries the racing
 // writer's stale read didn't have. See commit 9fe5619 for the original
 // regression this guards against.

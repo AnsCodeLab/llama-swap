@@ -12,7 +12,7 @@
 
 - Follow test naming: `TestConfig_<name>`, `TestServer_<name>` (per `AGENTS.md`).
 - Run `gofmt -w <file>` on every changed Go file before committing.
-- Build Go binaries into `./build/` (not relevant to this plan — no new binaries).
+- Build Go binaries into `./build/` (not relevant to this plan: no new binaries).
 - Use `go test -v -run <pattern>` to run new tests individually; use `make test-dev` after any change under `internal/` (runs `go test` + `staticcheck`); use `make test-ui` after UI changes; use `make test-all` before the final commit.
 - API keys and username/password are stored in plaintext in `config.yaml`, consistent with existing `apiKeys` behavior, and support `${env.VAR}` macro substitution for free (substitution happens at the raw-YAML-string level before parsing, in `LoadConfigFromReader`).
 - A request is admitted if it presents *either* a valid API key *or* valid Basic Auth username/password (alternate credentials, not both required).
@@ -22,7 +22,7 @@
 
 ### Task 1: Extract shared config-file-editing infrastructure into `internal/config`
 
-`internal/hub/configedit.go` already has a mutex-protected read-modify-write-encode-atomic-write cycle for `config.yaml` (added in commit `9fe5619` after two concurrent writers silently dropped each other's edits). The new Settings feature needs the same safe write path for a different top-level key (`apiKeys`, `auth`) — reusing the *same* mutex and atomic-write code is required, or the exact race that `9fe5619` fixed reappears with two independent lock-protected-but-mutually-unaware writers. This task moves the generic parts out of `hub` into `config` and generalizes "find or create the `models:` mapping" into "find or create any top-level mapping/sequence", with no behavior change.
+`internal/hub/configedit.go` already has a mutex-protected read-modify-write-encode-atomic-write cycle for `config.yaml` (added in commit `9fe5619` after two concurrent writers silently dropped each other's edits). The new Settings feature needs the same safe write path for a different top-level key (`apiKeys`, `auth`): reusing the *same* mutex and atomic-write code is required, or the exact race that `9fe5619` fixed reappears with two independent lock-protected-but-mutually-unaware writers. This task moves the generic parts out of `hub` into `config` and generalizes "find or create the `models:` mapping" into "find or create any top-level mapping/sequence", with no behavior change.
 
 **Files:**
 - Create: `internal/config/edit.go`
@@ -162,7 +162,7 @@ func TestConfigEdit_ConcurrentEditsAcrossKeys(t *testing.T) {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `go test ./internal/config/... -run TestConfigEdit -v`
-Expected: FAIL — `EditConfig`, `MappingChild`, `SequenceChild`, `StrNode` are undefined.
+Expected: FAIL: `EditConfig`, `MappingChild`, `SequenceChild`, `StrNode` are undefined.
 
 - [ ] **Step 3: Create `internal/config/edit.go` with the generalized helpers**
 
@@ -183,7 +183,7 @@ import (
 // process. Without it, concurrent callers (e.g. a hub download completing at
 // the same time a Settings API key is generated) race on the same config
 // file: each reads the pre-edit version, applies its own change in memory,
-// then writes back — last writer wins and silently discards every other
+// then writes back: last writer wins and silently discards every other
 // concurrent edit, including unrelated pre-existing entries the racing
 // writer's stale read didn't have. See commit 9fe5619 for the original
 // regression this guards against.
@@ -370,7 +370,7 @@ var errNoChange = errors.New("no change")
 - [ ] **Step 6: Run the full hub test suite to confirm no regression**
 
 Run: `go test ./internal/hub/... -v`
-Expected: PASS — every existing test in `configedit_test.go` (`TestConfigEdit_AddModelEntry`, `TestConfigEdit_AddModelEntryNoModelsSection`, `TestConfigEdit_AddModelEntryFlowStyleModels`, `TestConfigEdit_RemoveModelEntry`, `TestConfigEdit_RemoveModelEntryNotFound`, `TestConfigEdit_ConcurrentAddModelEntry`) and every other hub test continues to pass unchanged.
+Expected: PASS: every existing test in `configedit_test.go` (`TestConfigEdit_AddModelEntry`, `TestConfigEdit_AddModelEntryNoModelsSection`, `TestConfigEdit_AddModelEntryFlowStyleModels`, `TestConfigEdit_RemoveModelEntry`, `TestConfigEdit_RemoveModelEntryNotFound`, `TestConfigEdit_ConcurrentAddModelEntry`) and every other hub test continues to pass unchanged.
 
 - [ ] **Step 7: gofmt and commit**
 
@@ -439,7 +439,7 @@ models:
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `go test ./internal/config/... -run TestConfig_APIKeys_StructuredAndBareStringEntries -v`
-Expected: FAIL to compile — `cfg.RequiredAPIKeys[0].Key` doesn't exist yet (`RequiredAPIKeys` is still `[]string`).
+Expected: FAIL to compile: `cfg.RequiredAPIKeys[0].Key` doesn't exist yet (`RequiredAPIKeys` is still `[]string`).
 
 - [ ] **Step 3: Add `APIKeyEntry` and change the field type in `config.go`**
 
@@ -625,7 +625,7 @@ to:
 - [ ] **Step 9: Run the full config and server test suites**
 
 Run: `go test ./internal/config/... ./internal/server/... -v`
-Expected: PASS — no compile errors, all existing and new tests green.
+Expected: PASS: no compile errors, all existing and new tests green.
 
 - [ ] **Step 10: gofmt and commit**
 
@@ -737,7 +737,7 @@ models:
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `go test ./internal/config/... -run TestConfig_Auth -v`
-Expected: FAIL to compile — `cfg.Auth` doesn't exist yet.
+Expected: FAIL to compile: `cfg.Auth` doesn't exist yet.
 
 - [ ] **Step 3: Add `AuthConfig` and the `Auth` field**
 
@@ -764,7 +764,7 @@ Add the field to `Config` (near `RequiredAPIKeys`):
 In `LoadConfigFromReader`, right after the API keys validation loop added in Task 2 Step 4, add:
 
 ```go
-	// auth.username and auth.password must both be set or both empty —
+	// auth.username and auth.password must both be set or both empty:
 	// a lone one is almost certainly a typo and would otherwise silently
 	// lock everyone out (password set, username empty never matches) or
 	// leave the server unprotected (username set, password empty never
@@ -972,7 +972,7 @@ func TestSettingsEdit_ConcurrentAddAPIKey(t *testing.T) {
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `go test ./internal/config/... -run TestSettingsEdit -v`
-Expected: FAIL to compile — `AddAPIKey`, `RemoveAPIKey`, `SetAuthCredentials` are undefined.
+Expected: FAIL to compile: `AddAPIKey`, `RemoveAPIKey`, `SetAuthCredentials` are undefined.
 
 - [ ] **Step 3: Implement `internal/config/settingsedit.go`**
 
@@ -1034,7 +1034,7 @@ func AddAPIKey(configPath, label string) (id string, key string, err error) {
 }
 
 // RemoveAPIKey deletes the apiKeys: entry with the given id. Returns false
-// if no entry has that id — this includes legacy bare-string entries, which
+// if no entry has that id: this includes legacy bare-string entries, which
 // have no id and so can only be removed by hand-editing the file.
 func RemoveAPIKey(configPath, id string) (bool, error) {
 	found := false
@@ -1234,19 +1234,19 @@ func TestServer_GlobalAuthMiddleware(t *testing.T) {
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `go test ./internal/server/... -run TestServer_GlobalAuthMiddleware -v`
-Expected: FAIL to compile — `CreateGlobalAuthMiddleware` is undefined.
+Expected: FAIL to compile: `CreateGlobalAuthMiddleware` is undefined.
 
 - [ ] **Step 3: Add `CreateGlobalAuthMiddleware` in `auth.go`, alongside the existing `CreateAuthMiddleware`**
 
-In `internal/server/auth.go`, add this new function after the existing `CreateAuthMiddleware` function — do **not** remove or modify `CreateAuthMiddleware` in this task. It still has a caller in `server.go` (`routes()`'s `apiChain`); Task 7 removes both the old function and its caller together when it rewires `routes()` to use `CreateGlobalAuthMiddleware` instead. Keeping both functions side by side for one task means this commit compiles and every test passes, instead of leaving the package in a broken state until Task 7 lands.
+In `internal/server/auth.go`, add this new function after the existing `CreateAuthMiddleware` function: do **not** remove or modify `CreateAuthMiddleware` in this task. It still has a caller in `server.go` (`routes()`'s `apiChain`); Task 7 removes both the old function and its caller together when it rewires `routes()` to use `CreateGlobalAuthMiddleware` instead. Keeping both functions side by side for one task means this commit compiles and every test passes, instead of leaving the package in a broken state until Task 7 lands.
 
 ```go
 // CreateGlobalAuthMiddleware returns middleware that gates every request
-// llama-swap serves — the UI, health/metrics endpoints, and inference/API
-// routes alike — when either apiKeys or auth.username/password is
+// llama-swap serves: the UI, health/metrics endpoints, and inference/API
+// routes alike: when either apiKeys or auth.username/password is
 // configured. A request is admitted if it presents *either* a valid API key
 // (Authorization: Bearer, Authorization: Basic password field, or
-// x-api-key — unchanged from before) *or* valid HTTP Basic Auth
+// x-api-key: unchanged from before) *or* valid HTTP Basic Auth
 // username/password. When neither is configured it is a pass-through
 // (today's default-allow behavior). On success the auth headers are
 // stripped so they never leak to upstream.
@@ -1289,7 +1289,7 @@ func CreateGlobalAuthMiddleware(cfg config.Config) chain.Middleware {
 }
 ```
 
-Add `"crypto/subtle"` to the import block at the top of the file (keep the existing imports — `CreateAuthMiddleware` still needs them):
+Add `"crypto/subtle"` to the import block at the top of the file (keep the existing imports: `CreateAuthMiddleware` still needs them):
 
 ```go
 import (
@@ -1312,7 +1312,7 @@ Expected: PASS (all 8 subtests).
 - [ ] **Step 5: Run the full server package test suite**
 
 Run: `go test ./internal/server/... -v`
-Expected: PASS — both `CreateAuthMiddleware` (still wired into `server.go`'s `apiChain`, untouched by this task) and the new `CreateGlobalAuthMiddleware` (not yet wired anywhere) coexist. No regressions in any existing test.
+Expected: PASS: both `CreateAuthMiddleware` (still wired into `server.go`'s `apiChain`, untouched by this task) and the new `CreateGlobalAuthMiddleware` (not yet wired anywhere) coexist. No regressions in any existing test.
 
 - [ ] **Step 6: gofmt and commit**
 
@@ -1324,7 +1324,7 @@ server: add CreateGlobalAuthMiddleware alongside CreateAuthMiddleware
 
 Same API-key extraction as the existing CreateAuthMiddleware, plus an
 alternate HTTP Basic Auth username/password check using a constant-time
-comparison. Added side by side with the old function for now — Task 7
+comparison. Added side by side with the old function for now: Task 7
 wires this at the outermost layer of the handler chain (so it covers
 every route, not just modelChain/apiChain) and removes the now-unused
 CreateAuthMiddleware in the same commit that removes its last caller.
@@ -1510,7 +1510,7 @@ func TestSettingsAPI_APIKeyDelete_NotFound(t *testing.T) {
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `go test ./internal/server/... -run TestSettingsAPI -v`
-Expected: FAIL to compile — `s.configPath`, `s.handleSettingsAuthGet`, etc. are undefined.
+Expected: FAIL to compile: `s.configPath`, `s.handleSettingsAuthGet`, etc. are undefined.
 
 - [ ] **Step 3: Add the `configPath` field and setter to `Server`**
 
@@ -1665,7 +1665,7 @@ func (s *Server) handleSettingsAPIKeyDelete(w http.ResponseWriter, r *http.Reque
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `go test ./internal/server/... -run TestSettingsAPI -v`
-Expected: PASS (all 9 tests). Note: `go test ./internal/server/...` as a whole still fails to build until Task 7 fixes `server.go`'s call to the now-removed `CreateAuthMiddleware` — that's expected and resolved in the next task.
+Expected: PASS (all 9 tests). Note: `go test ./internal/server/...` as a whole still fails to build until Task 7 fixes `server.go`'s call to the now-removed `CreateAuthMiddleware`: that's expected and resolved in the next task.
 
 - [ ] **Step 6: gofmt and commit**
 
@@ -1757,7 +1757,7 @@ func TestServer_SettingsRoutes_Registered(t *testing.T) {
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `go test ./internal/server/... -run 'TestServer_GlobalAuth|TestServer_SettingsRoutes' -v`
-Expected: FAIL — `routes()` still wires the old `apiChain`/`authMW` setup, so `/ui/`, `/metrics`, and `/health` return 200 with no auth check, and `/api/settings/*` 404s (not yet registered).
+Expected: FAIL: `routes()` still wires the old `apiChain`/`authMW` setup, so `/ui/`, `/metrics`, and `/health` return 200 with no auth check, and `/api/settings/*` 404s (not yet registered).
 
 - [ ] **Step 3: Rewrite `routes()` in `server.go`**
 
@@ -1772,7 +1772,7 @@ func (s *Server) routes() {
 
 	// Model-dispatched routes get per-model concurrency limiting + body
 	// filters + in-flight tracking + token metrics. Auth is handled once,
-	// globally, by CreateGlobalAuthMiddleware in the outer handler below —
+	// globally, by CreateGlobalAuthMiddleware in the outer handler below;
 	// it now covers every route, not just this chain. concurrencyMW rejects
 	// with 429 before the body filters do any rewrite work. filterMW
 	// rewrites JSON bodies and formFilterMW rewrites multipart bodies; each
@@ -1865,9 +1865,9 @@ This removes the `apiChain` variable entirely: it previously existed only to app
 
 - [ ] **Step 4: Remove the now-unused `CreateAuthMiddleware` and its test**
 
-`routes()` no longer calls `CreateAuthMiddleware` — Task 5 added `CreateGlobalAuthMiddleware` alongside it rather than replacing it, specifically so this removal could happen in the same commit as its last caller disappearing. In `internal/server/auth.go`, delete the entire `CreateAuthMiddleware` function (and its doc comment) — everything from the comment block through its closing `}`, i.e. the function Task 5 left untouched. `extractAPIKey` and `CreateGlobalAuthMiddleware` remain.
+`routes()` no longer calls `CreateAuthMiddleware`: Task 5 added `CreateGlobalAuthMiddleware` alongside it rather than replacing it, specifically so this removal could happen in the same commit as its last caller disappearing. In `internal/server/auth.go`, delete the entire `CreateAuthMiddleware` function (and its doc comment): everything from the comment block through its closing `}`, i.e. the function Task 5 left untouched. `extractAPIKey` and `CreateGlobalAuthMiddleware` remain.
 
-In `internal/server/auth_test.go`, delete the entire `TestServer_AuthMiddleware` function — it tested `CreateAuthMiddleware`, which no longer exists, and is superseded by `TestServer_GlobalAuthMiddleware` (added in Task 5).
+In `internal/server/auth_test.go`, delete the entire `TestServer_AuthMiddleware` function: it tested `CreateAuthMiddleware`, which no longer exists, and is superseded by `TestServer_GlobalAuthMiddleware` (added in Task 5).
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
@@ -1877,7 +1877,7 @@ Expected: PASS (all 3 new tests, including the sub-checks in `TestServer_GlobalA
 - [ ] **Step 6: Run the full server package test suite**
 
 Run: `go test ./internal/server/... -v`
-Expected: PASS — confirm no regressions in any pre-existing test (`TestServer_CORSPreflight`, `TestServer_Health`, `TestServer_Unload`, etc.), and that removing `CreateAuthMiddleware`/`TestServer_AuthMiddleware` in Step 4 left no dangling references.
+Expected: PASS: confirm no regressions in any pre-existing test (`TestServer_CORSPreflight`, `TestServer_Health`, `TestServer_Unload`, etc.), and that removing `CreateAuthMiddleware`/`TestServer_AuthMiddleware` in Step 4 left no dangling references.
 
 - [ ] **Step 7: Wire `configPath` through `llama-swap.go`**
 
@@ -1913,7 +1913,7 @@ server: apply global auth to every route, wire up settings routes
 
 CreateGlobalAuthMiddleware now wraps the entire handler (UI, metrics,
 health, inference, everything) instead of just modelChain/apiChain, so
-apiChain's only job (applying authMW) is gone — routes it used to wrap
+apiChain's only job (applying authMW) is gone: routes it used to wrap
 are now registered directly on the mux. The now-unused CreateAuthMiddleware
 is removed in this same commit, alongside its superseded test. Also
 registers the new /api/settings/* routes and threads configPath through
@@ -1925,7 +1925,7 @@ EOF
 
 ---
 
-### Task 8: Documentation — `docs/configuration.md`, `config-schema.json`, `README.md`
+### Task 8: Documentation: `docs/configuration.md`, `config-schema.json`, `README.md`
 
 **Files:**
 - Modify: `docs/configuration.md:215-226`
@@ -1983,7 +1983,7 @@ apiKeys:
 # - optional, default: disabled
 # - username and password must both be set, or both left empty to disable
 # - a request is admitted if it presents either a valid apiKeys entry OR
-#   valid auth credentials — existing apiKeys-based API clients are
+#   valid auth credentials: existing apiKeys-based API clients are
 #   unaffected by turning this on
 # - the Settings page in the UI can configure this at runtime
 auth:
@@ -2081,7 +2081,7 @@ EOF
 
 ---
 
-### Task 9: UI — types and API client functions
+### Task 9: UI: types and API client functions
 
 **Files:**
 - Modify: `ui-svelte/src/lib/types.ts` (add `ApiKeyEntry`, `AuthStatus`)
@@ -2167,7 +2167,7 @@ export async function deleteApiKey(id: string): Promise<void> {
 }
 ```
 
-(These reuse the existing `hubFetch<T>` helper already defined in this file for the hub feature — it throws on non-OK responses with the response body as the message, which is exactly the behavior wanted here too.)
+(These reuse the existing `hubFetch<T>` helper already defined in this file for the hub feature: it throws on non-OK responses with the response body as the message, which is exactly the behavior wanted here too.)
 
 - [ ] **Step 3: Typecheck**
 
@@ -2190,7 +2190,7 @@ EOF
 
 ---
 
-### Task 10: UI — Settings page, route, and nav link
+### Task 10: UI: Settings page, route, and nav link
 
 **Files:**
 - Create: `ui-svelte/src/routes/Settings.svelte`
@@ -2304,7 +2304,7 @@ EOF
       {#if authStatus.enabled}
         This server is protected. Visitors must sign in with the username/password below.
       {:else}
-        This server is <strong>not protected</strong> — anyone with network access can use it.
+        This server is <strong>not protected</strong>: anyone with network access can use it.
       {/if}
     </p>
 
@@ -2355,7 +2355,7 @@ EOF
 
     {#if generatedKey}
       <div class="mb-4 p-3 rounded border border-warning bg-warning/10">
-        <p class="text-sm font-semibold mb-1">Copy this key now — it won't be shown again.</p>
+        <p class="text-sm font-semibold mb-1">Copy this key now: it won't be shown again.</p>
         <div class="flex items-center gap-2">
           <code class="flex-1 break-all">{generatedKey}</code>
           <button class="btn btn--sm" onclick={copyGeneratedKey}>{generatedKeyCopied ? "Copied!" : "Copy"}</button>
@@ -2390,9 +2390,9 @@ EOF
       <tbody>
         {#each apiKeys as entry (entry.id || entry.maskedKey)}
           <tr class="border-t border-card-border-inner">
-            <td>{entry.label || "—"}</td>
+            <td>{entry.label || "-"}</td>
             <td><code>{entry.maskedKey}</code></td>
-            <td>{entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "—"}</td>
+            <td>{entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "-"}</td>
             <td>
               {#if entry.id}
                 <button class="btn btn--sm" onclick={() => handleDeleteKey(entry)}>Delete</button>
@@ -2448,7 +2448,7 @@ Add, right after the existing "Performance" `<a>` link (before the theme toggle 
 - [ ] **Step 4: Typecheck and run the UI test suite**
 
 Run: `cd ui-svelte && npm run check && npm test`
-Expected: no type errors, all existing vitest suites still pass (no new tests are added in this task — `Settings.svelte` has no existing component-test precedent in this codebase, matching how `DiscoverPanel.svelte`/`ModelsPanel.svelte` etc. are also untested at the component level; only `lib/*.ts` pure-logic modules have vitest coverage).
+Expected: no type errors, all existing vitest suites still pass (no new tests are added in this task: `Settings.svelte` has no existing component-test precedent in this codebase, matching how `DiscoverPanel.svelte`/`ModelsPanel.svelte` etc. are also untested at the component level; only `lib/*.ts` pure-logic modules have vitest coverage).
 
 - [ ] **Step 5: Manually verify in the browser**
 
@@ -2496,9 +2496,9 @@ Expected: passes, including the concurrent-edit tests added in Tasks 1 and 4.
 
 - [ ] **Step 4: Manually verify default (unconfigured) behavior is unchanged**
 
-Run: `go run . --config config.example.yaml --listen :18080` (or equivalent build output) with `apiKeys` and `auth` both absent/empty in a scratch copy of the config, and confirm `curl -i http://localhost:18080/ui/` returns `200` with no `WWW-Authenticate` header — the default-allow behavior for users who configure neither feature must be byte-for-byte unchanged from before this plan.
+Run: `go run . --config config.example.yaml --listen :18080` (or equivalent build output) with `apiKeys` and `auth` both absent/empty in a scratch copy of the config, and confirm `curl -i http://localhost:18080/ui/` returns `200` with no `WWW-Authenticate` header: the default-allow behavior for users who configure neither feature must be byte-for-byte unchanged from before this plan.
 
 - [ ] **Step 5: Confirm no fixup commits are needed**
 
 Run: `git status`
-Expected: clean working tree — every task's changes were already committed at the end of that task.
+Expected: clean working tree: every task's changes were already committed at the end of that task.

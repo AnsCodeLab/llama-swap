@@ -12,19 +12,19 @@ import (
 )
 
 // globalAuthPathSkips lists routes that bypass auth entirely, even when
-// apiKeys or auth.username/password is configured — they return no
-// sensitive data and gating them risks crashlooping health-probed
+// apiKeys or auth.username/password is configured: they return no
+// sensitive data, and gating them risks crashlooping health-probed
 // deployments (load balancers, k8s liveness/readiness probes).
 var globalAuthPathSkips = []string{"/health", "/wol-health"}
 
 // CreateGlobalAuthMiddleware returns middleware that gates every request
-// llama-swap serves — the UI, /metrics, and inference/API routes alike —
+// llama-swap serves (the UI, /metrics, and inference/API routes alike)
 // when either apiKeys or auth.username/password is configured. /health and
 // /wol-health are always exempt (see globalAuthPathSkips), regardless of
 // configuration, since they return no sensitive data and are relied on by
 // monitoring/load-balancer health probes. A request to any other route is
 // admitted if it presents *either* a valid API key (Authorization: Bearer,
-// Authorization: Basic password field, or x-api-key — unchanged from
+// Authorization: Basic password field, or x-api-key, unchanged from
 // before) *or* valid HTTP Basic Auth username/password. When neither
 // apiKeys nor auth is configured it is a pass-through (today's
 // default-allow behavior). On success the auth headers are stripped so

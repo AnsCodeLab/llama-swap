@@ -199,7 +199,7 @@ func (s *Server) routes() {
 
 	// Model-dispatched routes get per-model concurrency limiting + body
 	// filters + in-flight tracking + token metrics. Auth is handled once,
-	// globally, by CreateGlobalAuthMiddleware in the outer handler below —
+	// globally, by CreateGlobalAuthMiddleware in the outer handler below;
 	// it now covers every route, not just this chain. concurrencyMW rejects
 	// with 429 before the body filters do any rewrite work. filterMW
 	// rewrites JSON bodies and formFilterMW rewrites multipart bodies; each

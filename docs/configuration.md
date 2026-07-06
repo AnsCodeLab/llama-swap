@@ -243,7 +243,7 @@ apiKeys:
 # - optional, default: disabled
 # - username and password must both be set, or both left empty to disable
 # - a request is admitted if it presents either a valid apiKeys entry OR
-#   valid auth credentials — existing apiKeys-based API clients are
+#   valid auth credentials; existing apiKeys-based API clients are
 #   unaffected by turning this on
 # - the Settings page in the UI can configure this at runtime
 auth:

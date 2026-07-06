@@ -55,7 +55,7 @@ func AddAPIKey(configPath, label string) (id string, key string, err error) {
 }
 
 // RemoveAPIKey deletes the apiKeys: entry with the given id. Returns false
-// if no entry has that id — this includes legacy bare-string entries, which
+// if no entry has that id; this includes legacy bare-string entries, which
 // have no id and so can only be removed by hand-editing the file.
 func RemoveAPIKey(configPath, id string) (bool, error) {
 	found := false

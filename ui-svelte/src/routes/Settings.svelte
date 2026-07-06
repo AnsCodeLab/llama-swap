@@ -99,7 +99,7 @@
       {#if authStatus.enabled}
         This server is protected. Visitors must sign in with the username/password below.
       {:else}
-        This server is <strong>not protected</strong> — anyone with network access can use it.
+        This server is <strong>not protected</strong>: anyone with network access can use it.
       {/if}
     </p>
 
@@ -150,7 +150,7 @@
 
     {#if generatedKey}
       <div class="mb-4 p-3 rounded border border-warning bg-warning/10">
-        <p class="text-sm font-semibold mb-1">Copy this key now — it won't be shown again.</p>
+        <p class="text-sm font-semibold mb-1">Copy this key now: it won't be shown again.</p>
         <div class="flex items-center gap-2">
           <code class="flex-1 break-all">{generatedKey}</code>
           <button class="btn btn--sm" onclick={copyGeneratedKey}>{generatedKeyCopied ? "Copied!" : "Copy"}</button>
@@ -185,9 +185,9 @@
       <tbody>
         {#each apiKeys as entry, i (entry.id || `${entry.maskedKey}-${i}`)}
           <tr class="border-t border-card-border-inner">
-            <td>{entry.label || "—"}</td>
+            <td>{entry.label || "-"}</td>
             <td><code>{entry.maskedKey}</code></td>
-            <td>{entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "—"}</td>
+            <td>{entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "-"}</td>
             <td>
               {#if entry.id}
                 <button class="btn btn--sm" onclick={() => handleDeleteKey(entry)}>Delete</button>
