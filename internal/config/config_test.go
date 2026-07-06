@@ -1740,3 +1740,76 @@ routing:
 	require.NoError(t, err)
 	assert.Equal(t, 5, cfg.Routing.Scheduler.Settings.Fifo.Priority["gemma"])
 }
+
+func TestConfig_Auth_ParsesUsernameAndPassword(t *testing.T) {
+	content := `
+auth:
+  username: "admin"
+  password: "hunter2"
+models:
+  test:
+    cmd: "server"
+    proxy: "http://localhost:8080"
+`
+	cfg, err := LoadConfigFromReader(strings.NewReader(content))
+	require.NoError(t, err)
+	assert.Equal(t, "admin", cfg.Auth.Username)
+	assert.Equal(t, "hunter2", cfg.Auth.Password)
+}
+
+func TestConfig_Auth_DefaultsToDisabled(t *testing.T) {
+	content := `
+models:
+  test:
+    cmd: "server"
+    proxy: "http://localhost:8080"
+`
+	cfg, err := LoadConfigFromReader(strings.NewReader(content))
+	require.NoError(t, err)
+	assert.Empty(t, cfg.Auth.Username)
+	assert.Empty(t, cfg.Auth.Password)
+}
+
+func TestConfig_Auth_UsernameWithoutPasswordIsAnError(t *testing.T) {
+	content := `
+auth:
+  username: "admin"
+models:
+  test:
+    cmd: "server"
+    proxy: "http://localhost:8080"
+`
+	_, err := LoadConfigFromReader(strings.NewReader(content))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "auth.username and auth.password must both be set")
+}
+
+func TestConfig_Auth_PasswordWithoutUsernameIsAnError(t *testing.T) {
+	content := `
+auth:
+  password: "hunter2"
+models:
+  test:
+    cmd: "server"
+    proxy: "http://localhost:8080"
+`
+	_, err := LoadConfigFromReader(strings.NewReader(content))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "auth.username and auth.password must both be set")
+}
+
+func TestConfig_Auth_EnvMacroSubstitution(t *testing.T) {
+	t.Setenv("TEST_AUTH_PASSWORD", "from-env")
+	content := `
+auth:
+  username: "admin"
+  password: "${env.TEST_AUTH_PASSWORD}"
+models:
+  test:
+    cmd: "server"
+    proxy: "http://localhost:8080"
+`
+	cfg, err := LoadConfigFromReader(strings.NewReader(content))
+	require.NoError(t, err)
+	assert.Equal(t, "from-env", cfg.Auth.Password)
+}

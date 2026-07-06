@@ -118,6 +118,13 @@ type HookOnStartup struct {
 	Preload []string `yaml:"preload"`
 }
 
+// AuthConfig gates every route llama-swap serves with HTTP Basic Auth. Empty
+// Username and Password (the default) disables it.
+type AuthConfig struct {
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+}
+
 // APIKeyEntry is one entry in apiKeys:. It accepts either a bare YAML string
 // (legacy shape, becomes {Key: value}) or a mapping with key/label/createdAt,
 // so existing configs keep working unchanged.
@@ -186,6 +193,9 @@ type Config struct {
 
 	// support API keys, see issue #433, #50, #251
 	RequiredAPIKeys []APIKeyEntry `yaml:"apiKeys"`
+
+	// gates every route with HTTP Basic Auth; empty means disabled
+	Auth AuthConfig `yaml:"auth"`
 
 	// support remote peers, see issue #433, #296
 	Peers PeerDictionaryConfig `yaml:"peers"`
@@ -631,6 +641,15 @@ func LoadConfigFromReader(r io.Reader) (Config, error) {
 		if strings.Contains(entry.Key, " ") {
 			return Config{}, fmt.Errorf("api key cannot contain spaces: `%s`", entry.Key)
 		}
+	}
+
+	// auth.username and auth.password must both be set or both empty —
+	// a lone one is almost certainly a typo and would otherwise silently
+	// lock everyone out (password set, username empty never matches) or
+	// leave the server unprotected (username set, password empty never
+	// matches either, since BasicAuth requires both).
+	if (config.Auth.Username == "") != (config.Auth.Password == "") {
+		return Config{}, fmt.Errorf("auth.username and auth.password must both be set, or both empty to disable protection")
 	}
 
 	// Process peers with global macro substitution
