@@ -212,9 +212,12 @@ macros:
   # - useful for paths, secrets, or machine-specific configuration
   "models_dir": "${env.HOME}/models"
 
-# apiKeys: require an API key when making requests to inference endpoints
+# apiKeys: require an API key when making requests to any endpoint
 # - optional, default: []
 # - when empty (the default) authorization will not be checked as llama-swap is default-allow
+# - when set, every route is gated (the UI dashboard, metrics, and inference
+#   endpoints alike) except /health and /wol-health, which always stay open
+#   with no credentials so monitoring/load-balancer probes keep working
 # - each entry is either a bare string, or a mapping with an optional label/createdAt
 # - the Settings page in the UI can generate, label, and revoke these at runtime
 apiKeys:
@@ -233,8 +236,10 @@ apiKeys:
     label: "CI pipeline"
     createdAt: "2026-07-06T10:00:00Z"
 
-# auth: protect every route llama-swap serves (the UI dashboard, health,
-# metrics, and inference endpoints alike) with HTTP Basic Auth.
+# auth: protect every route llama-swap serves (the UI dashboard, metrics,
+# and inference endpoints alike) with HTTP Basic Auth, except /health and
+# /wol-health, which always stay open with no credentials so monitoring/
+# load-balancer probes keep working.
 # - optional, default: disabled
 # - username and password must both be set, or both left empty to disable
 # - a request is admitted if it presents either a valid apiKeys entry OR

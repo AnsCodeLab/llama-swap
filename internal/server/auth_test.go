@@ -177,4 +177,16 @@ func TestServer_GlobalAuthMiddleware(t *testing.T) {
 			t.Errorf("status = %d, want 401", w.Code)
 		}
 	})
+
+	t.Run("both configured: /health and /wol-health remain open with no credentials", func(t *testing.T) {
+		mw := CreateGlobalAuthMiddleware(bothCfg)
+		for _, path := range []string{"/health", "/wol-health"} {
+			r := httptest.NewRequest(http.MethodGet, path, nil)
+			w := httptest.NewRecorder()
+			mw(final).ServeHTTP(w, r)
+			if w.Code != http.StatusOK {
+				t.Errorf("GET %s with no credentials: status = %d, want 200", path, w.Code)
+			}
+		}
+	})
 }

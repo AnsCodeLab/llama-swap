@@ -346,11 +346,22 @@ func TestServer_GlobalAuth_ProtectsUIAndMetrics(t *testing.T) {
 	s.cfg = config.Config{Auth: config.AuthConfig{Username: "admin", Password: "hunter2"}}
 	s.routes()
 
-	for _, path := range []string{"/ui/", "/metrics", "/health"} {
+	for _, path := range []string{"/ui/", "/metrics"} {
 		w := httptest.NewRecorder()
 		s.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
 		if w.Code != http.StatusUnauthorized {
 			t.Errorf("GET %s unauthenticated: status = %d, want 401", path, w.Code)
+		}
+	}
+
+	// /health and /wol-health are always exempt from the global auth gate,
+	// even when auth is configured, since monitoring/load-balancer probes
+	// rely on them staying reachable with no credentials.
+	for _, path := range []string{"/health", "/wol-health"} {
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		if w.Code != http.StatusOK {
+			t.Errorf("GET %s unauthenticated: status = %d, want 200 (exempt from auth)", path, w.Code)
 		}
 	}
 

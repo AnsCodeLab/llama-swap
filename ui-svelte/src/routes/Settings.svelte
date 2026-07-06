@@ -119,7 +119,7 @@
         type="password"
         class="px-3 py-1 rounded border border-gray-200 dark:border-white/10 bg-surface"
         bind:value={password}
-        placeholder={authStatus.enabled ? "leave blank to keep current password" : ""}
+        placeholder={authStatus.enabled ? "" : "new password"}
         autocomplete="new-password"
       />
 
@@ -183,7 +183,7 @@
         </tr>
       </thead>
       <tbody>
-        {#each apiKeys as entry (entry.id || entry.maskedKey)}
+        {#each apiKeys as entry, i (entry.id || `${entry.maskedKey}-${i}`)}
           <tr class="border-t border-card-border-inner">
             <td>{entry.label || "—"}</td>
             <td><code>{entry.maskedKey}</code></td>
