@@ -118,3 +118,108 @@ func TestServer_AuthMiddleware(t *testing.T) {
 		}
 	})
 }
+
+func TestServer_GlobalAuthMiddleware(t *testing.T) {
+	final := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "" || r.Header.Get("x-api-key") != "" {
+			t.Error("auth headers leaked to upstream")
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	t.Run("nothing configured passes through", func(t *testing.T) {
+		mw := CreateGlobalAuthMiddleware(config.Config{})
+		w := httptest.NewRecorder()
+		mw(final).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/ui/", nil))
+		if w.Code != http.StatusOK {
+			t.Errorf("status = %d, want 200", w.Code)
+		}
+	})
+
+	apiKeyCfg := config.Config{RequiredAPIKeys: []config.APIKeyEntry{{Key: "secret"}}}
+
+	t.Run("valid api key, no username/password configured", func(t *testing.T) {
+		mw := CreateGlobalAuthMiddleware(apiKeyCfg)
+		r := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+		r.Header.Set("Authorization", "Bearer secret")
+		w := httptest.NewRecorder()
+		mw(final).ServeHTTP(w, r)
+		if w.Code != http.StatusOK {
+			t.Errorf("status = %d, want 200", w.Code)
+		}
+	})
+
+	t.Run("api key protects the UI route too", func(t *testing.T) {
+		mw := CreateGlobalAuthMiddleware(apiKeyCfg)
+		r := httptest.NewRequest(http.MethodGet, "/ui/", nil)
+		w := httptest.NewRecorder()
+		mw(final).ServeHTTP(w, r)
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("status = %d, want 401 for unauthenticated /ui/ request", w.Code)
+		}
+	})
+
+	authCfg := config.Config{Auth: config.AuthConfig{Username: "admin", Password: "hunter2"}}
+
+	t.Run("valid basic auth, no api keys configured", func(t *testing.T) {
+		mw := CreateGlobalAuthMiddleware(authCfg)
+		r := httptest.NewRequest(http.MethodGet, "/ui/", nil)
+		r.SetBasicAuth("admin", "hunter2")
+		w := httptest.NewRecorder()
+		mw(final).ServeHTTP(w, r)
+		if w.Code != http.StatusOK {
+			t.Errorf("status = %d, want 200", w.Code)
+		}
+	})
+
+	t.Run("invalid basic auth password rejected", func(t *testing.T) {
+		mw := CreateGlobalAuthMiddleware(authCfg)
+		r := httptest.NewRequest(http.MethodGet, "/ui/", nil)
+		r.SetBasicAuth("admin", "wrong")
+		w := httptest.NewRecorder()
+		mw(final).ServeHTTP(w, r)
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("status = %d, want 401", w.Code)
+		}
+		if w.Header().Get("WWW-Authenticate") == "" {
+			t.Error("missing WWW-Authenticate header")
+		}
+	})
+
+	bothCfg := config.Config{
+		RequiredAPIKeys: []config.APIKeyEntry{{Key: "secret"}},
+		Auth:            config.AuthConfig{Username: "admin", Password: "hunter2"},
+	}
+
+	t.Run("both configured: api key alone is sufficient", func(t *testing.T) {
+		mw := CreateGlobalAuthMiddleware(bothCfg)
+		r := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+		r.Header.Set("x-api-key", "secret")
+		w := httptest.NewRecorder()
+		mw(final).ServeHTTP(w, r)
+		if w.Code != http.StatusOK {
+			t.Errorf("status = %d, want 200", w.Code)
+		}
+	})
+
+	t.Run("both configured: basic auth alone is sufficient", func(t *testing.T) {
+		mw := CreateGlobalAuthMiddleware(bothCfg)
+		r := httptest.NewRequest(http.MethodGet, "/ui/", nil)
+		r.SetBasicAuth("admin", "hunter2")
+		w := httptest.NewRecorder()
+		mw(final).ServeHTTP(w, r)
+		if w.Code != http.StatusOK {
+			t.Errorf("status = %d, want 200", w.Code)
+		}
+	})
+
+	t.Run("both configured: neither credential rejected", func(t *testing.T) {
+		mw := CreateGlobalAuthMiddleware(bothCfg)
+		r := httptest.NewRequest(http.MethodGet, "/ui/", nil)
+		w := httptest.NewRecorder()
+		mw(final).ServeHTTP(w, r)
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("status = %d, want 401", w.Code)
+		}
+	})
+}

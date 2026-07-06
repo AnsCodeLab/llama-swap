@@ -1,6 +1,7 @@
 package server
 
 import (
+	"crypto/subtle"
 	"encoding/base64"
 	"net/http"
 	"strings"
@@ -40,6 +41,53 @@ func CreateAuthMiddleware(cfg config.Config) chain.Middleware {
 			r.Header.Del("Authorization")
 			r.Header.Del("x-api-key")
 			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// CreateGlobalAuthMiddleware returns middleware that gates every request
+// llama-swap serves — the UI, health/metrics endpoints, and inference/API
+// routes alike — when either apiKeys or auth.username/password is
+// configured. A request is admitted if it presents *either* a valid API key
+// (Authorization: Bearer, Authorization: Basic password field, or
+// x-api-key — unchanged from before) *or* valid HTTP Basic Auth
+// username/password. When neither is configured it is a pass-through
+// (today's default-allow behavior). On success the auth headers are
+// stripped so they never leak to upstream.
+func CreateGlobalAuthMiddleware(cfg config.Config) chain.Middleware {
+	keys := cfg.RequiredAPIKeys
+	username := cfg.Auth.Username
+	password := cfg.Auth.Password
+	authEnabled := username != "" || password != ""
+
+	return func(next http.Handler) http.Handler {
+		if len(keys) == 0 && !authEnabled {
+			return next
+		}
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			provided := extractAPIKey(r)
+			for _, entry := range keys {
+				if provided != "" && provided == entry.Key {
+					r.Header.Del("Authorization")
+					r.Header.Del("x-api-key")
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+
+			if authEnabled {
+				if u, p, ok := r.BasicAuth(); ok &&
+					subtle.ConstantTimeCompare([]byte(u), []byte(username)) == 1 &&
+					subtle.ConstantTimeCompare([]byte(p), []byte(password)) == 1 {
+					r.Header.Del("Authorization")
+					r.Header.Del("x-api-key")
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+
+			w.Header().Set("WWW-Authenticate", `Basic realm="llama-swap"`)
+			router.SendResponse(w, r, http.StatusUnauthorized, "unauthorized: invalid or missing credentials")
 		})
 	}
 }
