@@ -91,7 +91,7 @@ func TestServer_AuthMiddleware(t *testing.T) {
 		}
 	})
 
-	cfg := config.Config{RequiredAPIKeys: []string{"secret"}}
+	cfg := config.Config{RequiredAPIKeys: []config.APIKeyEntry{{Key: "secret"}}}
 
 	t.Run("valid key", func(t *testing.T) {
 		mw := CreateAuthMiddleware(cfg)

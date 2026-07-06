@@ -25,8 +25,8 @@ func CreateAuthMiddleware(cfg config.Config) chain.Middleware {
 			provided := extractAPIKey(r)
 
 			valid := false
-			for _, key := range keys {
-				if provided == key {
+			for _, entry := range keys {
+				if provided != "" && provided == entry.Key {
 					valid = true
 					break
 				}

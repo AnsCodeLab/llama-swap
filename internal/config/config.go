@@ -118,6 +118,31 @@ type HookOnStartup struct {
 	Preload []string `yaml:"preload"`
 }
 
+// APIKeyEntry is one entry in apiKeys:. It accepts either a bare YAML string
+// (legacy shape, becomes {Key: value}) or a mapping with key/label/createdAt,
+// so existing configs keep working unchanged.
+type APIKeyEntry struct {
+	ID        string `yaml:"id,omitempty"`
+	Key       string `yaml:"key"`
+	Label     string `yaml:"label,omitempty"`
+	CreatedAt string `yaml:"createdAt,omitempty"`
+}
+
+// UnmarshalYAML implements the dual bare-string/mapping shape described above.
+func (e *APIKeyEntry) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		e.Key = value.Value
+		return nil
+	}
+	type rawAPIKeyEntry APIKeyEntry
+	var raw rawAPIKeyEntry
+	if err := value.Decode(&raw); err != nil {
+		return err
+	}
+	*e = APIKeyEntry(raw)
+	return nil
+}
+
 type Config struct {
 	HealthCheckTimeout int                    `yaml:"healthCheckTimeout"`
 	LogRequests        bool                   `yaml:"logRequests"`
@@ -160,7 +185,7 @@ type Config struct {
 	IncludeAliasesInList bool `yaml:"includeAliasesInList"`
 
 	// support API keys, see issue #433, #50, #251
-	RequiredAPIKeys []string `yaml:"apiKeys"`
+	RequiredAPIKeys []APIKeyEntry `yaml:"apiKeys"`
 
 	// support remote peers, see issue #433, #296
 	Peers PeerDictionaryConfig `yaml:"peers"`
@@ -599,14 +624,13 @@ func LoadConfigFromReader(r io.Reader) (Config, error) {
 	}
 
 	// Validate API keys (env macros already substituted at string level)
-	for i, apikey := range config.RequiredAPIKeys {
-		if apikey == "" {
+	for _, entry := range config.RequiredAPIKeys {
+		if entry.Key == "" {
 			return Config{}, fmt.Errorf("empty api key found in apiKeys")
 		}
-		if strings.Contains(apikey, " ") {
-			return Config{}, fmt.Errorf("api key cannot contain spaces: `%s`", apikey)
+		if strings.Contains(entry.Key, " ") {
+			return Config{}, fmt.Errorf("api key cannot contain spaces: `%s`", entry.Key)
 		}
-		config.RequiredAPIKeys[i] = apikey
 	}
 
 	// Process peers with global macro substitution

@@ -818,7 +818,7 @@ func TestConfig_APIKeys_EnvMacros(t *testing.T) {
 		content := `apiKeys: ["${env.TEST_API_KEY}"]`
 		config, err := LoadConfigFromReader(strings.NewReader(content))
 		assert.NoError(t, err)
-		assert.Equal(t, []string{"secret-key-123"}, config.RequiredAPIKeys)
+		assert.Equal(t, []APIKeyEntry{{Key: "secret-key-123"}}, config.RequiredAPIKeys)
 	})
 
 	t.Run("multiple env substitutions in apiKeys", func(t *testing.T) {
@@ -828,7 +828,7 @@ func TestConfig_APIKeys_EnvMacros(t *testing.T) {
 		content := `apiKeys: ["${env.TEST_API_KEY_1}", "${env.TEST_API_KEY_2}", "static-key"]`
 		config, err := LoadConfigFromReader(strings.NewReader(content))
 		assert.NoError(t, err)
-		assert.Equal(t, []string{"key-one", "key-two", "static-key"}, config.RequiredAPIKeys)
+		assert.Equal(t, []APIKeyEntry{{Key: "key-one"}, {Key: "key-two"}, {Key: "static-key"}}, config.RequiredAPIKeys)
 	})
 
 	t.Run("missing env var in apiKeys", func(t *testing.T) {
@@ -847,6 +847,31 @@ func TestConfig_APIKeys_EnvMacros(t *testing.T) {
 		assert.Error(t, err)
 		assert.Equal(t, "empty api key found in apiKeys", err.Error())
 	})
+}
+
+func TestConfig_APIKeys_StructuredAndBareStringEntries(t *testing.T) {
+	content := `
+apiKeys:
+  - key: "sk-labeled"
+    label: "CI pipeline"
+    createdAt: "2026-07-06T10:00:00Z"
+  - "sk-bare-string"
+models:
+  test:
+    cmd: "server"
+    proxy: "http://localhost:8080"
+`
+	cfg, err := LoadConfigFromReader(strings.NewReader(content))
+	require.NoError(t, err)
+	require.Len(t, cfg.RequiredAPIKeys, 2)
+
+	assert.Equal(t, "sk-labeled", cfg.RequiredAPIKeys[0].Key)
+	assert.Equal(t, "CI pipeline", cfg.RequiredAPIKeys[0].Label)
+	assert.Equal(t, "2026-07-06T10:00:00Z", cfg.RequiredAPIKeys[0].CreatedAt)
+
+	assert.Equal(t, "sk-bare-string", cfg.RequiredAPIKeys[1].Key)
+	assert.Empty(t, cfg.RequiredAPIKeys[1].Label)
+	assert.Empty(t, cfg.RequiredAPIKeys[1].ID)
 }
 
 func TestConfig_GlobalTTL(t *testing.T) {
@@ -1405,7 +1430,7 @@ models:
 `
 		config, err := LoadConfigFromReader(strings.NewReader(content))
 		assert.NoError(t, err)
-		assert.Equal(t, []string{"active-key-value"}, config.RequiredAPIKeys)
+		assert.Equal(t, []APIKeyEntry{{Key: "active-key-value"}}, config.RequiredAPIKeys)
 	})
 
 	t.Run("env macros in indented comments are ignored", func(t *testing.T) {
@@ -1435,7 +1460,7 @@ models:
 `
 		config, err := LoadConfigFromReader(strings.NewReader(content))
 		assert.NoError(t, err)
-		assert.Equal(t, []string{"real-value"}, config.RequiredAPIKeys)
+		assert.Equal(t, []APIKeyEntry{{Key: "real-value"}}, config.RequiredAPIKeys)
 	})
 
 }
