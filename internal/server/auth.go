@@ -11,40 +11,6 @@ import (
 	"github.com/mostlygeek/llama-swap/internal/router"
 )
 
-// CreateAuthMiddleware returns middleware that validates API keys when the
-// config declares any. It accepts the key via Authorization: Bearer,
-// Authorization: Basic (password field), or x-api-key. On success the auth
-// headers are stripped so they never leak to upstream. When no keys are
-// configured the middleware is a pass-through.
-func CreateAuthMiddleware(cfg config.Config) chain.Middleware {
-	keys := cfg.RequiredAPIKeys
-	return func(next http.Handler) http.Handler {
-		if len(keys) == 0 {
-			return next
-		}
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			provided := extractAPIKey(r)
-
-			valid := false
-			for _, entry := range keys {
-				if provided != "" && provided == entry.Key {
-					valid = true
-					break
-				}
-			}
-			if !valid {
-				w.Header().Set("WWW-Authenticate", `Basic realm="llama-swap"`)
-				router.SendResponse(w, r, http.StatusUnauthorized, "unauthorized: invalid or missing API key")
-				return
-			}
-
-			r.Header.Del("Authorization")
-			r.Header.Del("x-api-key")
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
 // CreateGlobalAuthMiddleware returns middleware that gates every request
 // llama-swap serves — the UI, health/metrics endpoints, and inference/API
 // routes alike — when either apiKeys or auth.username/password is

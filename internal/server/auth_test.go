@@ -74,51 +74,6 @@ func TestServer_IsTokenChar(t *testing.T) {
 	}
 }
 
-func TestServer_AuthMiddleware(t *testing.T) {
-	final := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "" || r.Header.Get("x-api-key") != "" {
-			t.Error("auth headers leaked to upstream")
-		}
-		w.WriteHeader(http.StatusOK)
-	})
-
-	t.Run("no keys configured passes through", func(t *testing.T) {
-		mw := CreateAuthMiddleware(config.Config{})
-		w := httptest.NewRecorder()
-		mw(final).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
-		if w.Code != http.StatusOK {
-			t.Errorf("status = %d, want 200", w.Code)
-		}
-	})
-
-	cfg := config.Config{RequiredAPIKeys: []config.APIKeyEntry{{Key: "secret"}}}
-
-	t.Run("valid key", func(t *testing.T) {
-		mw := CreateAuthMiddleware(cfg)
-		r := httptest.NewRequest(http.MethodGet, "/", nil)
-		r.Header.Set("Authorization", "Bearer secret")
-		w := httptest.NewRecorder()
-		mw(final).ServeHTTP(w, r)
-		if w.Code != http.StatusOK {
-			t.Errorf("status = %d, want 200", w.Code)
-		}
-	})
-
-	t.Run("invalid key", func(t *testing.T) {
-		mw := CreateAuthMiddleware(cfg)
-		r := httptest.NewRequest(http.MethodGet, "/", nil)
-		r.Header.Set("Authorization", "Bearer wrong")
-		w := httptest.NewRecorder()
-		mw(final).ServeHTTP(w, r)
-		if w.Code != http.StatusUnauthorized {
-			t.Errorf("status = %d, want 401", w.Code)
-		}
-		if w.Header().Get("WWW-Authenticate") == "" {
-			t.Error("missing WWW-Authenticate header")
-		}
-	})
-}
-
 func TestServer_GlobalAuthMiddleware(t *testing.T) {
 	final := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "" || r.Header.Get("x-api-key") != "" {

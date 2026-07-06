@@ -192,28 +192,26 @@ func stripVersionPrefix(r *http.Request) {
 }
 
 // routes builds the mux, registers every route, and wraps the mux with the
-// global CORS middleware.
+// global request-log + CORS + auth middleware.
 func (s *Server) routes() {
-	authMW := CreateAuthMiddleware(s.cfg)
 	filterMW := CreateFilterMiddleware(s.cfg)
 	formFilterMW := CreateFormFilterMiddleware(s.cfg)
 
-	// Model-dispatched routes get auth + per-model concurrency limiting + body
-	// filters + in-flight tracking + token metrics. concurrencyMW rejects with
-	// 429 before the body filters do any rewrite work. filterMW rewrites JSON
-	// bodies and formFilterMW rewrites multipart bodies; each is a no-op for the
-	// other's Content-Type. Both run before the metrics middleware so it buffers
-	// the rewritten body.
+	// Model-dispatched routes get per-model concurrency limiting + body
+	// filters + in-flight tracking + token metrics. Auth is handled once,
+	// globally, by CreateGlobalAuthMiddleware in the outer handler below —
+	// it now covers every route, not just this chain. concurrencyMW rejects
+	// with 429 before the body filters do any rewrite work. filterMW
+	// rewrites JSON bodies and formFilterMW rewrites multipart bodies; each
+	// is a no-op for the other's Content-Type. Both run before the metrics
+	// middleware so it buffers the rewritten body.
 	modelChain := chain.New(
-		authMW,
 		CreateConcurrencyMiddleware(s.cfg),
 		filterMW,
 		formFilterMW,
 		CreateInflightMiddleware(s.inflight),
 		CreateMetricsMiddleware(s.metrics, s.cfg),
 	)
-	// Custom endpoints only need auth.
-	apiChain := chain.New(authMW)
 
 	mux := http.NewServeMux()
 	dispatch := http.HandlerFunc(s.localPeerHandler)
@@ -229,10 +227,10 @@ func (s *Server) routes() {
 	}
 
 	// llama-swap API + custom endpoints.
-	mux.Handle("GET /v1/models", apiChain.ThenFunc(s.handleListModels))
-	mux.Handle("GET /logs", apiChain.ThenFunc(s.handleLogs))
-	mux.Handle("GET /logs/stream", apiChain.ThenFunc(s.handleLogStream))
-	mux.Handle("GET /logs/stream/{logMonitorID...}", apiChain.ThenFunc(s.handleLogStream))
+	mux.HandleFunc("GET /v1/models", s.handleListModels)
+	mux.HandleFunc("GET /logs", s.handleLogs)
+	mux.HandleFunc("GET /logs/stream", s.handleLogStream)
+	mux.HandleFunc("GET /logs/stream/{logMonitorID...}", s.handleLogStream)
 
 	mux.HandleFunc("GET /health", handleHealth)
 	mux.HandleFunc("GET /wol-health", handleHealth)
@@ -242,40 +240,51 @@ func (s *Server) routes() {
 	mux.HandleFunc("GET /ui/", s.handleUI)
 	mux.HandleFunc("GET /favicon.ico", s.handleFavicon)
 
-	// Prometheus metrics (no auth, matches the legacy endpoint).
+	// Prometheus metrics.
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
 
 	// Operations endpoints.
-	mux.Handle("GET /unload", apiChain.ThenFunc(s.handleUnload))
-	mux.Handle("GET /running", apiChain.ThenFunc(s.handleRunning))
+	mux.HandleFunc("GET /unload", s.handleUnload)
+	mux.HandleFunc("GET /running", s.handleRunning)
 
 	// Upstream passthrough.
 	mux.HandleFunc("GET /upstream", handleUpstreamRedirect)
-	mux.Handle("/upstream/{upstreamPath...}", apiChain.ThenFunc(s.handleUpstream))
+	mux.HandleFunc("/upstream/{upstreamPath...}", s.handleUpstream)
 
-	// API group (API-key protected) consumed by the UI.
-	mux.Handle("POST /api/models/unload", apiChain.ThenFunc(s.handleAPIUnloadAll))
-	mux.Handle("POST /api/models/unload/{model...}", apiChain.ThenFunc(s.handleAPIUnloadModel))
-	mux.Handle("GET /api/events", apiChain.ThenFunc(s.handleAPIEvents))
-	mux.Handle("GET /api/metrics", apiChain.ThenFunc(s.handleAPIMetrics))
-	mux.Handle("GET /api/performance", apiChain.ThenFunc(s.handleAPIPerformance))
-	mux.Handle("GET /api/version", apiChain.ThenFunc(s.handleAPIVersion))
-	mux.Handle("GET /api/captures/{id}", apiChain.ThenFunc(s.handleAPICapture))
+	// API group consumed by the UI.
+	mux.HandleFunc("POST /api/models/unload", s.handleAPIUnloadAll)
+	mux.HandleFunc("POST /api/models/unload/{model...}", s.handleAPIUnloadModel)
+	mux.HandleFunc("GET /api/events", s.handleAPIEvents)
+	mux.HandleFunc("GET /api/metrics", s.handleAPIMetrics)
+	mux.HandleFunc("GET /api/performance", s.handleAPIPerformance)
+	mux.HandleFunc("GET /api/version", s.handleAPIVersion)
+	mux.HandleFunc("GET /api/captures/{id}", s.handleAPICapture)
 
 	// HuggingFace hub (model downloads).
-	mux.Handle("GET /api/hub/popular", apiChain.ThenFunc(s.handleHubPopular))
-	mux.Handle("GET /api/hub/search", apiChain.ThenFunc(s.handleHubSearch))
-	mux.Handle("GET /api/hub/repo/{repo...}", apiChain.ThenFunc(s.handleHubRepo))
-	mux.Handle("GET /api/hub/detail/{repo...}", apiChain.ThenFunc(s.handleHubDetail))
-	mux.Handle("GET /api/hub/downloads", apiChain.ThenFunc(s.handleHubDownloads))
-	mux.Handle("POST /api/hub/download", apiChain.ThenFunc(s.handleHubDownload))
-	mux.Handle("POST /api/hub/download/cancel", apiChain.ThenFunc(s.handleHubDownloadCancel))
-	mux.Handle("POST /api/hub/downloads/clear", apiChain.ThenFunc(s.handleHubDownloadsClear))
-	mux.Handle("POST /api/hub/delete", apiChain.ThenFunc(s.handleHubDelete))
-	mux.Handle("GET /api/hub/hardware", apiChain.ThenFunc(s.handleHubHardware))
+	mux.HandleFunc("GET /api/hub/popular", s.handleHubPopular)
+	mux.HandleFunc("GET /api/hub/search", s.handleHubSearch)
+	mux.HandleFunc("GET /api/hub/repo/{repo...}", s.handleHubRepo)
+	mux.HandleFunc("GET /api/hub/detail/{repo...}", s.handleHubDetail)
+	mux.HandleFunc("GET /api/hub/downloads", s.handleHubDownloads)
+	mux.HandleFunc("POST /api/hub/download", s.handleHubDownload)
+	mux.HandleFunc("POST /api/hub/download/cancel", s.handleHubDownloadCancel)
+	mux.HandleFunc("POST /api/hub/downloads/clear", s.handleHubDownloadsClear)
+	mux.HandleFunc("POST /api/hub/delete", s.handleHubDelete)
+	mux.HandleFunc("GET /api/hub/hardware", s.handleHubHardware)
+
+	// Settings: auth credentials + API key management.
+	mux.HandleFunc("GET /api/settings/auth", s.handleSettingsAuthGet)
+	mux.HandleFunc("POST /api/settings/auth", s.handleSettingsAuthSet)
+	mux.HandleFunc("GET /api/settings/apikeys", s.handleSettingsAPIKeysList)
+	mux.HandleFunc("POST /api/settings/apikeys/generate", s.handleSettingsAPIKeyGenerate)
+	mux.HandleFunc("POST /api/settings/apikeys/delete", s.handleSettingsAPIKeyDelete)
 
 	s.mux = mux
-	s.handler = chain.New(CreateRequestLogMiddleware(s.proxylog), CreateCORSMiddleware()).Then(mux)
+	s.handler = chain.New(
+		CreateRequestLogMiddleware(s.proxylog),
+		CreateCORSMiddleware(), // must run before auth: answers OPTIONS preflight unauthenticated
+		CreateGlobalAuthMiddleware(s.cfg),
+	).Then(mux)
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {

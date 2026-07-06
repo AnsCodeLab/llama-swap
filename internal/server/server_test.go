@@ -339,3 +339,54 @@ func TestServer_LogStream_UnknownID_Returns400(t *testing.T) {
 		t.Errorf("status=%d want 400", w.Code)
 	}
 }
+
+func TestServer_GlobalAuth_ProtectsUIAndMetrics(t *testing.T) {
+	local := newStubRouter([]string{"m1"}, "ok")
+	s := newTestServer(local, newStubRouter(nil, ""))
+	s.cfg = config.Config{Auth: config.AuthConfig{Username: "admin", Password: "hunter2"}}
+	s.routes()
+
+	for _, path := range []string{"/ui/", "/metrics", "/health"} {
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("GET %s unauthenticated: status = %d, want 401", path, w.Code)
+		}
+	}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/health", nil)
+	r.SetBasicAuth("admin", "hunter2")
+	s.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Errorf("GET /health authenticated: status = %d, want 200", w.Code)
+	}
+}
+
+func TestServer_GlobalAuth_DisabledByDefaultPassesThrough(t *testing.T) {
+	s := newTestServer(newStubRouter(nil, ""), newStubRouter(nil, ""))
+	s.routes()
+
+	w := httptest.NewRecorder()
+	s.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/health", nil))
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+}
+
+func TestServer_SettingsRoutes_Registered(t *testing.T) {
+	s := newTestServer(newStubRouter(nil, ""), newStubRouter(nil, ""))
+	s.routes()
+
+	w := httptest.NewRecorder()
+	s.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/settings/auth", nil))
+	if w.Code != http.StatusOK {
+		t.Errorf("GET /api/settings/auth: status = %d, want 200", w.Code)
+	}
+
+	w2 := httptest.NewRecorder()
+	s.ServeHTTP(w2, httptest.NewRequest(http.MethodGet, "/api/settings/apikeys", nil))
+	if w2.Code != http.StatusOK {
+		t.Errorf("GET /api/settings/apikeys: status = %d, want 200", w2.Code)
+	}
+}

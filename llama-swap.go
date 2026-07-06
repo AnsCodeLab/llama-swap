@@ -158,6 +158,7 @@ func main() {
 		os.Exit(1)
 	}
 	initialSrv.SetHubManager(hubManager)
+	initialSrv.SetConfigPath(configPath)
 
 	// activeSrv is swapped atomically during hot reload.
 	var activeMu sync.RWMutex
@@ -214,6 +215,7 @@ func main() {
 			return
 		}
 		newSrv.SetHubManager(hubManager)
+		newSrv.SetConfigPath(configPath)
 
 		activeMu.Lock()
 		old := activeSrv
