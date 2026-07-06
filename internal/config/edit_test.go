@@ -29,7 +29,7 @@ func writeEditTestConfig(t *testing.T) string {
 	return path
 }
 
-func TestConfigEdit_MappingChild_CreatesWhenAbsent(t *testing.T) {
+func TestConfig_EditMappingChildCreatesWhenAbsent(t *testing.T) {
 	path := writeEditTestConfig(t)
 	err := EditConfig(path, func(root *yaml.Node) error {
 		auth, err := MappingChild(root, "auth")
@@ -48,7 +48,7 @@ func TestConfigEdit_MappingChild_CreatesWhenAbsent(t *testing.T) {
 	assert.Contains(t, string(out), "# my llama-swap config")
 }
 
-func TestConfigEdit_MappingChild_ReusesExisting(t *testing.T) {
+func TestConfig_EditMappingChildReusesExisting(t *testing.T) {
 	path := writeEditTestConfig(t)
 	err := EditConfig(path, func(root *yaml.Node) error {
 		models, err := MappingChild(root, "models")
@@ -67,7 +67,7 @@ func TestConfigEdit_MappingChild_ReusesExisting(t *testing.T) {
 	assert.Contains(t, s, "new-model:")
 }
 
-func TestConfigEdit_SequenceChild_CreatesWhenAbsent(t *testing.T) {
+func TestConfig_EditSequenceChildCreatesWhenAbsent(t *testing.T) {
 	path := writeEditTestConfig(t)
 	err := EditConfig(path, func(root *yaml.Node) error {
 		keys, err := SequenceChild(root, "apiKeys")
@@ -85,7 +85,7 @@ func TestConfigEdit_SequenceChild_CreatesWhenAbsent(t *testing.T) {
 	assert.Contains(t, string(out), `"sk-test"`)
 }
 
-func TestConfigEdit_ConcurrentEditsAcrossKeys(t *testing.T) {
+func TestConfig_EditConcurrentEditsAcrossKeys(t *testing.T) {
 	path := writeEditTestConfig(t)
 
 	var wg sync.WaitGroup
