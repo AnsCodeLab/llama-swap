@@ -223,13 +223,28 @@ export async function getCapture(id: number): Promise<ReqRespCapture | null> {
 // (modelsDir not configured).
 export class HubDisabledError extends Error {}
 
+// extractErrorMessage pulls the human-readable "error" field out of the
+// server's {"src":"llama-swap","error":"..."} envelope, so callers show a
+// clean message instead of the raw JSON blob. Falls back to the raw body if
+// it isn't JSON shaped that way.
+async function extractErrorMessage(response: Response): Promise<string> {
+  const text = await response.text();
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed?.error === "string") return parsed.error;
+  } catch {
+    // not JSON, use the raw text as-is
+  }
+  return text;
+}
+
 async function hubFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
   if (response.status === 503) {
-    throw new HubDisabledError(await response.text());
+    throw new HubDisabledError(await extractErrorMessage(response));
   }
   if (!response.ok) {
-    throw new Error(await response.text());
+    throw new Error(await extractErrorMessage(response));
   }
   return (await response.json()) as T;
 }

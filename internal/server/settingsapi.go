@@ -24,7 +24,7 @@ func (s *Server) settingsEnabled(w http.ResponseWriter, r *http.Request) bool {
 	}
 	if !s.hasBootstrapCredential() {
 		router.SendResponse(w, r, http.StatusServiceUnavailable,
-			"settings management requires an existing API key or auth credential in config.yaml — add one by hand first (see docs/configuration.md), then use this UI to manage further keys/credentials")
+			"settings management is locked: add one apiKeys entry or an auth.username/password pair to config.yaml by hand first (see docs/configuration.md), then this page can manage further keys and credentials")
 		return false
 	}
 	return true
