@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mostlygeek/llama-swap/internal/config"
 	"github.com/stretchr/testify/assert"
@@ -246,4 +247,78 @@ func TestSettingsAPI_ReadOnlyEndpoints_NotGatedByMissingCredential(t *testing.T)
 	listW := httptest.NewRecorder()
 	s.handleSettingsAPIKeysList(listW, httptest.NewRequest(http.MethodGet, "/api/settings/apikeys", nil))
 	assert.Equal(t, http.StatusOK, listW.Code)
+}
+
+// waitForReload blocks until reloaded receives a value or the timeout
+// elapses, failing the test in the latter case. requestReload runs the
+// callback in a goroutine, so the signal isn't necessarily available the
+// instant the handler returns.
+func waitForReload(t *testing.T, reloaded <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-reloaded:
+	case <-time.After(2 * time.Second):
+		t.Fatal("reload was not requested")
+	}
+}
+
+func TestSettingsAPI_AuthSet_RequestsReload(t *testing.T) {
+	s := newSettingsTestServer(t, bootstrappedConfig())
+	reloaded := make(chan struct{}, 1)
+	s.SetReloadFunc(func() { reloaded <- struct{}{} })
+
+	req := httptest.NewRequest(http.MethodPost, "/api/settings/auth", strings.NewReader(`{"username":"admin","password":"newpass"}`))
+	w := httptest.NewRecorder()
+	s.handleSettingsAuthSet(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	waitForReload(t, reloaded)
+}
+
+func TestSettingsAPI_APIKeyGenerate_RequestsReload(t *testing.T) {
+	s := newSettingsTestServer(t, bootstrappedConfig())
+	reloaded := make(chan struct{}, 1)
+	s.SetReloadFunc(func() { reloaded <- struct{}{} })
+
+	req := httptest.NewRequest(http.MethodPost, "/api/settings/apikeys/generate", strings.NewReader(`{}`))
+	w := httptest.NewRecorder()
+	s.handleSettingsAPIKeyGenerate(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	waitForReload(t, reloaded)
+}
+
+func TestSettingsAPI_APIKeyDelete_RequestsReload(t *testing.T) {
+	s := newSettingsTestServer(t, bootstrappedConfig())
+
+	genReq := httptest.NewRequest(http.MethodPost, "/api/settings/apikeys/generate", strings.NewReader(`{}`))
+	genW := httptest.NewRecorder()
+	s.handleSettingsAPIKeyGenerate(genW, genReq)
+	require.Equal(t, http.StatusOK, genW.Code)
+	var genBody struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, json.NewDecoder(genW.Body).Decode(&genBody))
+
+	reloaded := make(chan struct{}, 1)
+	s.SetReloadFunc(func() { reloaded <- struct{}{} })
+
+	delReq := httptest.NewRequest(http.MethodPost, "/api/settings/apikeys/delete", strings.NewReader(`{"id":"`+genBody.ID+`"}`))
+	delW := httptest.NewRecorder()
+	s.handleSettingsAPIKeyDelete(delW, delReq)
+	require.Equal(t, http.StatusOK, delW.Code)
+
+	waitForReload(t, reloaded)
+}
+
+func TestSettingsAPI_MutatingEndpoints_NoReloadFuncIsFine(t *testing.T) {
+	// s.reloadFn is nil by default (newSettingsTestServer never sets it).
+	// Every mutating endpoint must still succeed; requestReload's nil check
+	// must not panic.
+	s := newSettingsTestServer(t, bootstrappedConfig())
+
+	genReq := httptest.NewRequest(http.MethodPost, "/api/settings/apikeys/generate", strings.NewReader(`{}`))
+	genW := httptest.NewRecorder()
+	s.handleSettingsAPIKeyGenerate(genW, genReq)
+	assert.Equal(t, http.StatusOK, genW.Code)
 }

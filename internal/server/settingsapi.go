@@ -43,6 +43,18 @@ func (s *Server) hasBootstrapCredential() bool {
 	return len(s.cfg.RequiredAPIKeys) > 0 || s.cfg.Auth.Username != ""
 }
 
+// requestReload asks the running server to reload config.yaml after a
+// settings handler has just written to it, so the change (a new/removed API
+// key, or new auth credentials) is reflected immediately in this and future
+// requests instead of waiting for the poll-based --watch-config watcher.
+// Mirrors hub.Manager's own reload-after-edit call. No-op if the server was
+// built without SetReloadFunc.
+func (s *Server) requestReload() {
+	if s.reloadFn != nil {
+		go s.reloadFn()
+	}
+}
+
 func maskAPIKey(key string) string {
 	if len(key) <= 10 {
 		return "••••••"
@@ -77,6 +89,7 @@ func (s *Server) handleSettingsAuthSet(w http.ResponseWriter, r *http.Request) {
 		router.SendResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("failed to save credentials: %v", err))
 		return
 	}
+	s.requestReload()
 	sendJSON(w, map[string]string{"msg": "ok"})
 }
 
@@ -114,6 +127,7 @@ func (s *Server) handleSettingsAPIKeyGenerate(w http.ResponseWriter, r *http.Req
 		router.SendResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("failed to save API key: %v", err))
 		return
 	}
+	s.requestReload()
 	sendJSON(w, map[string]string{"id": id, "key": key, "label": label})
 }
 
@@ -137,5 +151,6 @@ func (s *Server) handleSettingsAPIKeyDelete(w http.ResponseWriter, r *http.Reque
 		router.SendResponse(w, r, http.StatusNotFound, "no API key with that id")
 		return
 	}
+	s.requestReload()
 	sendJSON(w, map[string]string{"msg": "ok"})
 }

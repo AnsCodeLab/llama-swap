@@ -44,6 +44,14 @@ type Server struct {
 	// settings persistence).
 	configPath string
 
+	// reloadFn requests a full config reload after /api/settings/* handlers
+	// edit config.yaml, so the change is visible immediately instead of
+	// waiting for the poll-based --watch-config watcher (or never, if it
+	// isn't enabled). Mirrors hub.Manager's own reloadFn for the same
+	// config-edit-then-refresh pattern. Nil when the server was constructed
+	// without SetReloadFunc (e.g. in tests that don't need this).
+	reloadFn func()
+
 	mux     *http.ServeMux
 	handler http.Handler
 
@@ -158,6 +166,15 @@ func (s *Server) SetHubManager(m *hub.Manager) {
 // serving, mirroring SetHubManager.
 func (s *Server) SetConfigPath(path string) {
 	s.configPath = path
+}
+
+// SetReloadFunc registers the callback /api/settings/* handlers call after
+// successfully editing config.yaml, so the change is reflected immediately
+// instead of waiting for the poll-based --watch-config watcher. Call this on
+// every server built, before it starts serving, mirroring hub.Manager's own
+// SetReloadFunc for the same edit-then-refresh pattern.
+func (s *Server) SetReloadFunc(fn func()) {
+	s.reloadFn = fn
 }
 
 // localPeerHandler dispatches a model-routed request to the local or peer

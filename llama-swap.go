@@ -179,7 +179,11 @@ func main() {
 	var reloading bool
 	var reloadMu sync.Mutex
 
-	reload := func() {
+	// declared before assignment (not reload := func(){...}) so the closure
+	// body can pass reload itself to newSrv.SetReloadFunc, keeping every
+	// server instance's reload callback pointed at the same function.
+	var reload func()
+	reload = func() {
 		reloadMu.Lock()
 		if reloading {
 			reloadMu.Unlock()
@@ -216,6 +220,7 @@ func main() {
 		}
 		newSrv.SetHubManager(hubManager)
 		newSrv.SetConfigPath(configPath)
+		newSrv.SetReloadFunc(reload)
 
 		activeMu.Lock()
 		old := activeSrv
@@ -237,6 +242,7 @@ func main() {
 	}
 
 	hubManager.SetReloadFunc(reload)
+	initialSrv.SetReloadFunc(reload)
 
 	watcherCtx, watcherCancel := context.WithCancel(context.Background())
 	defer watcherCancel()
