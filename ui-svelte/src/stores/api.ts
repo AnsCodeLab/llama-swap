@@ -12,6 +12,8 @@ import type {
   HubRepo,
   HubRepoDetail,
   HubFile,
+  AuthStatus,
+  ApiKeyEntry,
 } from "../lib/types";
 import type { Hardware } from "../lib/modelFit";
 import { connectionState } from "./theme";
@@ -277,6 +279,38 @@ export async function hubDeleteModel(modelId: string): Promise<void> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ modelId }),
+  });
+}
+
+export async function getAuthStatus(): Promise<AuthStatus> {
+  return hubFetch<AuthStatus>("/api/settings/auth");
+}
+
+export async function setAuthCredentials(username: string, password: string): Promise<void> {
+  await hubFetch("/api/settings/auth", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+export async function listApiKeys(): Promise<ApiKeyEntry[]> {
+  return hubFetch<ApiKeyEntry[]>("/api/settings/apikeys");
+}
+
+export async function generateApiKey(label: string): Promise<{ id: string; key: string; label: string }> {
+  return hubFetch(`/api/settings/apikeys/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ label }),
+  });
+}
+
+export async function deleteApiKey(id: string): Promise<void> {
+  await hubFetch(`/api/settings/apikeys/delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
   });
 }
 

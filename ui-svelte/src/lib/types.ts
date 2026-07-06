@@ -136,6 +136,18 @@ export interface HubFile {
   downloaded: boolean;
 }
 
+export interface AuthStatus {
+  enabled: boolean;
+  username: string;
+}
+
+export interface ApiKeyEntry {
+  id: string;
+  label: string;
+  createdAt: string;
+  maskedKey: string;
+}
+
 export interface HistogramData {
   bins: number[];
   min: number;
