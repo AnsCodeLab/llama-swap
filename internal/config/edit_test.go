@@ -85,6 +85,26 @@ func TestConfig_EditSequenceChildCreatesWhenAbsent(t *testing.T) {
 	assert.Contains(t, string(out), `"sk-test"`)
 }
 
+func TestConfig_EditForcesOwnerOnlyFilePermissions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	// Write the initial file with permissive, group/world-readable bits to
+	// simulate a config.yaml that predates the auth/API-key feature.
+	require.NoError(t, os.WriteFile(path, []byte(editTestConfig), 0644))
+
+	require.NoError(t, EditConfig(path, func(root *yaml.Node) error {
+		auth, err := MappingChild(root, "auth")
+		if err != nil {
+			return err
+		}
+		auth.Content = append(auth.Content, StrNode("username", 0), StrNode("admin", 0))
+		return nil
+	}))
+
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0600), info.Mode().Perm(), "config.yaml must be owner-only after an edit since it can hold plaintext credentials")
+}
+
 func TestConfig_EditConcurrentEditsAcrossKeys(t *testing.T) {
 	path := writeEditTestConfig(t)
 

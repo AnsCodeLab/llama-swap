@@ -12,14 +12,35 @@ import (
 )
 
 // settingsEnabled gates every /api/settings write endpoint: persisting
-// changes requires knowing where config.yaml lives.
+// changes requires knowing where config.yaml lives, and (to prevent an
+// anonymous visitor from planting their own credential on a freshly
+// installed, unconfigured server) requires that at least one credential
+// already exists.
 func (s *Server) settingsEnabled(w http.ResponseWriter, r *http.Request) bool {
 	if s.configPath == "" {
 		router.SendResponse(w, r, http.StatusServiceUnavailable,
 			"settings management is unavailable: no config file path")
 		return false
 	}
+	if !s.hasBootstrapCredential() {
+		router.SendResponse(w, r, http.StatusServiceUnavailable,
+			"settings management requires an existing API key or auth credential in config.yaml — add one by hand first (see docs/configuration.md), then use this UI to manage further keys/credentials")
+		return false
+	}
 	return true
+}
+
+// hasBootstrapCredential reports whether the loaded config already has at
+// least one API key or auth credential configured. When neither is set (the
+// server's default, out-of-the-box state), the global auth middleware
+// (CreateGlobalAuthMiddleware) is a full pass-through, meaning any anonymous
+// visitor who can reach the server over the network could otherwise call the
+// mutating settings endpoints to plant a persistent API key or set their own
+// auth credentials, locking out the real operator. Requiring an existing
+// credential first closes that path: once any credential exists, the global
+// auth middleware already requires it for every route, including these.
+func (s *Server) hasBootstrapCredential() bool {
+	return len(s.cfg.RequiredAPIKeys) > 0 || s.cfg.Auth.Username != ""
 }
 
 func maskAPIKey(key string) string {

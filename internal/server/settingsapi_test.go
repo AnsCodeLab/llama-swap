@@ -24,6 +24,16 @@ func newSettingsTestServer(t *testing.T, cfg config.Config) *Server {
 	return s
 }
 
+// bootstrappedConfig returns a config with a pre-existing auth credential
+// already set, i.e. the state a server must reach before the mutating
+// /api/settings/* endpoints will do anything. Tests that exercise those
+// mutating endpoints for behavior other than the credential gate itself
+// (bad request handling, persistence, delete-not-found, etc.) need to start
+// from this bootstrapped state so they aren't short-circuited by the 503.
+func bootstrappedConfig() config.Config {
+	return config.Config{Auth: config.AuthConfig{Username: "bootstrap-admin", Password: "bootstrap-pw"}}
+}
+
 func TestSettingsAPI_AuthGet_Disabled(t *testing.T) {
 	s := newSettingsTestServer(t, config.Config{})
 	w := httptest.NewRecorder()
@@ -54,7 +64,7 @@ func TestSettingsAPI_AuthGet_Enabled(t *testing.T) {
 }
 
 func TestSettingsAPI_AuthSet_RequiresBothOrNeither(t *testing.T) {
-	s := newSettingsTestServer(t, config.Config{})
+	s := newSettingsTestServer(t, bootstrappedConfig())
 	req := httptest.NewRequest(http.MethodPost, "/api/settings/auth", strings.NewReader(`{"username":"admin","password":""}`))
 	w := httptest.NewRecorder()
 	s.handleSettingsAuthSet(w, req)
@@ -62,7 +72,7 @@ func TestSettingsAPI_AuthSet_RequiresBothOrNeither(t *testing.T) {
 }
 
 func TestSettingsAPI_AuthSet_PersistsToConfigFile(t *testing.T) {
-	s := newSettingsTestServer(t, config.Config{})
+	s := newSettingsTestServer(t, bootstrappedConfig())
 	req := httptest.NewRequest(http.MethodPost, "/api/settings/auth", strings.NewReader(`{"username":"admin","password":"hunter2"}`))
 	w := httptest.NewRecorder()
 	s.handleSettingsAuthSet(w, req)
@@ -98,7 +108,7 @@ func TestSettingsAPI_APIKeysList_MasksKeys(t *testing.T) {
 }
 
 func TestSettingsAPI_APIKeyGenerate_PersistsAndReturnsPlaintextOnce(t *testing.T) {
-	s := newSettingsTestServer(t, config.Config{})
+	s := newSettingsTestServer(t, bootstrappedConfig())
 	req := httptest.NewRequest(http.MethodPost, "/api/settings/apikeys/generate", strings.NewReader(`{"label":"my key"}`))
 	w := httptest.NewRecorder()
 	s.handleSettingsAPIKeyGenerate(w, req)
@@ -121,7 +131,7 @@ func TestSettingsAPI_APIKeyGenerate_PersistsAndReturnsPlaintextOnce(t *testing.T
 }
 
 func TestSettingsAPI_APIKeyGenerate_NoBodyIsFine(t *testing.T) {
-	s := newSettingsTestServer(t, config.Config{})
+	s := newSettingsTestServer(t, bootstrappedConfig())
 	req := httptest.NewRequest(http.MethodPost, "/api/settings/apikeys/generate", nil)
 	w := httptest.NewRecorder()
 	s.handleSettingsAPIKeyGenerate(w, req)
@@ -129,7 +139,7 @@ func TestSettingsAPI_APIKeyGenerate_NoBodyIsFine(t *testing.T) {
 }
 
 func TestSettingsAPI_APIKeyDelete(t *testing.T) {
-	s := newSettingsTestServer(t, config.Config{})
+	s := newSettingsTestServer(t, bootstrappedConfig())
 	genReq := httptest.NewRequest(http.MethodPost, "/api/settings/apikeys/generate", strings.NewReader(`{}`))
 	genW := httptest.NewRecorder()
 	s.handleSettingsAPIKeyGenerate(genW, genReq)
@@ -149,9 +159,91 @@ func TestSettingsAPI_APIKeyDelete(t *testing.T) {
 }
 
 func TestSettingsAPI_APIKeyDelete_NotFound(t *testing.T) {
-	s := newSettingsTestServer(t, config.Config{})
+	s := newSettingsTestServer(t, bootstrappedConfig())
 	req := httptest.NewRequest(http.MethodPost, "/api/settings/apikeys/delete", strings.NewReader(`{"id":"nope"}`))
 	w := httptest.NewRecorder()
 	s.handleSettingsAPIKeyDelete(w, req)
 	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+// --- Fix: mutating settings endpoints must require an existing credential ---
+//
+// Without this gate, a freshly installed server with neither apiKeys nor
+// auth.username/password configured (the default, out-of-the-box state)
+// would let any anonymous network visitor call these mutation endpoints,
+// since the global auth middleware is a full pass-through until a credential
+// exists. That would let an attacker plant a persistent API key or set their
+// own auth credentials, potentially locking out the real operator.
+
+func TestSettingsAPI_AuthSet_RequiresExistingCredential(t *testing.T) {
+	s := newSettingsTestServer(t, config.Config{})
+	req := httptest.NewRequest(http.MethodPost, "/api/settings/auth", strings.NewReader(`{"username":"attacker","password":"pwned"}`))
+	w := httptest.NewRecorder()
+	s.handleSettingsAuthSet(w, req)
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+
+	// Confirm the config file itself was left untouched.
+	cfg, err := config.LoadConfig(s.configPath)
+	require.NoError(t, err)
+	assert.Empty(t, cfg.Auth.Username)
+}
+
+func TestSettingsAPI_APIKeyGenerate_RequiresExistingCredential(t *testing.T) {
+	s := newSettingsTestServer(t, config.Config{})
+	req := httptest.NewRequest(http.MethodPost, "/api/settings/apikeys/generate", strings.NewReader(`{"label":"attacker key"}`))
+	w := httptest.NewRecorder()
+	s.handleSettingsAPIKeyGenerate(w, req)
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+
+	cfg, err := config.LoadConfig(s.configPath)
+	require.NoError(t, err)
+	assert.Empty(t, cfg.RequiredAPIKeys)
+}
+
+func TestSettingsAPI_APIKeyDelete_RequiresExistingCredential(t *testing.T) {
+	s := newSettingsTestServer(t, config.Config{})
+	req := httptest.NewRequest(http.MethodPost, "/api/settings/apikeys/delete", strings.NewReader(`{"id":"whatever"}`))
+	w := httptest.NewRecorder()
+	s.handleSettingsAPIKeyDelete(w, req)
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+}
+
+func TestSettingsAPI_MutatingEndpoints_WorkOnceCredentialExists(t *testing.T) {
+	// Confirms the bootstrapped case (already covered individually by other
+	// tests above) isn't broken by the new gate, exercising all three
+	// mutating endpoints together against a config with a pre-existing
+	// credential.
+	s := newSettingsTestServer(t, bootstrappedConfig())
+
+	authReq := httptest.NewRequest(http.MethodPost, "/api/settings/auth", strings.NewReader(`{"username":"admin","password":"newpw"}`))
+	authW := httptest.NewRecorder()
+	s.handleSettingsAuthSet(authW, authReq)
+	assert.Equal(t, http.StatusOK, authW.Code)
+
+	genReq := httptest.NewRequest(http.MethodPost, "/api/settings/apikeys/generate", strings.NewReader(`{"label":"ci"}`))
+	genW := httptest.NewRecorder()
+	s.handleSettingsAPIKeyGenerate(genW, genReq)
+	require.Equal(t, http.StatusOK, genW.Code)
+
+	var genBody struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, json.NewDecoder(genW.Body).Decode(&genBody))
+
+	delReq := httptest.NewRequest(http.MethodPost, "/api/settings/apikeys/delete", strings.NewReader(`{"id":"`+genBody.ID+`"}`))
+	delW := httptest.NewRecorder()
+	s.handleSettingsAPIKeyDelete(delW, delReq)
+	assert.Equal(t, http.StatusOK, delW.Code)
+}
+
+func TestSettingsAPI_ReadOnlyEndpoints_NotGatedByMissingCredential(t *testing.T) {
+	s := newSettingsTestServer(t, config.Config{})
+
+	authW := httptest.NewRecorder()
+	s.handleSettingsAuthGet(authW, httptest.NewRequest(http.MethodGet, "/api/settings/auth", nil))
+	assert.Equal(t, http.StatusOK, authW.Code)
+
+	listW := httptest.NewRecorder()
+	s.handleSettingsAPIKeysList(listW, httptest.NewRequest(http.MethodGet, "/api/settings/apikeys", nil))
+	assert.Equal(t, http.StatusOK, listW.Code)
 }

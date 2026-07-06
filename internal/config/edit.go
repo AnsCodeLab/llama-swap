@@ -100,12 +100,12 @@ func StrNode(value string, style yaml.Style) *yaml.Node {
 }
 
 // atomicWrite replaces path with data via a temp file + rename in the same
-// directory, preserving the original file mode.
+// directory. The file is always written with owner-only (0600) permissions,
+// regardless of whatever mode the file previously had: config.yaml can now
+// hold a plaintext auth password and plaintext API keys, so it must never be
+// left group- or world-readable.
 func atomicWrite(path string, data []byte) error {
-	mode := os.FileMode(0644)
-	if st, err := os.Stat(path); err == nil {
-		mode = st.Mode().Perm()
-	}
+	const mode = os.FileMode(0600)
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".config-*.yaml")
 	if err != nil {
 		return err
