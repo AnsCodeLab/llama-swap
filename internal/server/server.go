@@ -38,6 +38,12 @@ type Server struct {
 
 	hub *hub.Manager
 
+	// configPath is the config.yaml path, used by /api/settings/* handlers
+	// to persist API key and auth credential changes. Empty when the server
+	// was constructed without SetConfigPath (e.g. in tests that don't need
+	// settings persistence).
+	configPath string
+
 	mux     *http.ServeMux
 	handler http.Handler
 
@@ -145,6 +151,13 @@ func New(cfg config.Config, muxlog *logmon.Monitor, proxylog *logmon.Monitor, up
 // server built, before it starts serving.
 func (s *Server) SetHubManager(m *hub.Manager) {
 	s.hub = m
+}
+
+// SetConfigPath records the config.yaml path so /api/settings/* handlers can
+// persist changes. Call this on every server built, before it starts
+// serving, mirroring SetHubManager.
+func (s *Server) SetConfigPath(path string) {
+	s.configPath = path
 }
 
 // localPeerHandler dispatches a model-routed request to the local or peer
