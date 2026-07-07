@@ -322,3 +322,44 @@ func TestSettingsAPI_MutatingEndpoints_NoReloadFuncIsFine(t *testing.T) {
 	s.handleSettingsAPIKeyGenerate(genW, genReq)
 	assert.Equal(t, http.StatusOK, genW.Code)
 }
+
+func TestSettingsAPI_APIKeyReveal_ReturnsPlaintext(t *testing.T) {
+	s := newSettingsTestServer(t, config.Config{
+		RequiredAPIKeys: []config.APIKeyEntry{
+			{ID: "abc123", Key: "sk-averylongsecretvalue1234567890", Label: "CI"},
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/api/settings/apikeys/abc123/reveal", nil)
+	req.SetPathValue("id", "abc123")
+	w := httptest.NewRecorder()
+	s.handleSettingsAPIKeyReveal(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var body struct {
+		Key string `json:"key"`
+	}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&body))
+	assert.Equal(t, "sk-averylongsecretvalue1234567890", body.Key)
+}
+
+func TestSettingsAPI_APIKeyReveal_NotFound(t *testing.T) {
+	s := newSettingsTestServer(t, config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/settings/apikeys/nonexistent/reveal", nil)
+	req.SetPathValue("id", "nonexistent")
+	w := httptest.NewRecorder()
+	s.handleSettingsAPIKeyReveal(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestSettingsAPI_APIKeyReveal_IgnoresLegacyBareStringEntries(t *testing.T) {
+	// Legacy bare-string entries have no id (ID == ""). A reveal request
+	// with an empty id must never match one and leak its key.
+	s := newSettingsTestServer(t, config.Config{
+		RequiredAPIKeys: []config.APIKeyEntry{{Key: "sk-legacy-bare-string"}},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/api/settings/apikeys//reveal", nil)
+	req.SetPathValue("id", "")
+	w := httptest.NewRecorder()
+	s.handleSettingsAPIKeyReveal(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}

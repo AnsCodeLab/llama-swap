@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { getAuthStatus, setAuthCredentials, listApiKeys, generateApiKey, deleteApiKey } from "../stores/api";
+  import { getAuthStatus, setAuthCredentials, listApiKeys, generateApiKey, deleteApiKey, revealApiKey } from "../stores/api";
   import type { AuthStatus, ApiKeyEntry } from "../lib/types";
 
   let authStatus = $state<AuthStatus>({ enabled: false, username: "" });
@@ -15,6 +15,7 @@
   let generatedKey = $state("");
   let generatedKeyCopied = $state(false);
   let apiKeysError = $state("");
+  let copiedRowId = $state("");
 
   async function loadAuthStatus(): Promise<void> {
     authStatus = await getAuthStatus();
@@ -81,14 +82,53 @@
     }
   }
 
+  async function copyTextToClipboard(text: string): Promise<void> {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+    // Fallback for non-secure contexts (HTTP on a non-localhost origin),
+    // where navigator.clipboard is unavailable.
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.left = "-9999px";
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand("copy");
+    document.body.removeChild(textarea);
+  }
+
   async function copyGeneratedKey(): Promise<void> {
-    await navigator.clipboard.writeText(generatedKey);
-    generatedKeyCopied = true;
-    setTimeout(() => (generatedKeyCopied = false), 1500);
+    try {
+      await copyTextToClipboard(generatedKey);
+      generatedKeyCopied = true;
+      setTimeout(() => (generatedKeyCopied = false), 1500);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+      apiKeysError = "Could not copy to clipboard; select the key text and copy it manually.";
+    }
   }
 
   function dismissGeneratedKey(): void {
     generatedKey = "";
+  }
+
+  // Fetches an existing key's plaintext value on demand and copies it. This
+  // is a deliberate relaxation of "shown once at creation": any
+  // authenticated user of this page can copy any key at any time, which
+  // widens what a compromised Settings session can exfiltrate compared to
+  // the creation-only exposure window used elsewhere in this feature.
+  async function handleCopyExistingKey(entry: ApiKeyEntry): Promise<void> {
+    apiKeysError = "";
+    try {
+      const key = await revealApiKey(entry.id);
+      await copyTextToClipboard(key);
+      copiedRowId = entry.id;
+      setTimeout(() => (copiedRowId = ""), 1500);
+    } catch (e) {
+      apiKeysError = e instanceof Error ? e.message : String(e);
+    }
   }
 </script>
 
@@ -190,6 +230,9 @@
             <td>{entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "-"}</td>
             <td>
               {#if entry.id}
+                <button class="btn btn--sm" onclick={() => handleCopyExistingKey(entry)}>
+                  {copiedRowId === entry.id ? "Copied!" : "Copy"}
+                </button>
                 <button class="btn btn--sm" onclick={() => handleDeleteKey(entry)}>Delete</button>
               {/if}
             </td>

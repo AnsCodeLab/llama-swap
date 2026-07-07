@@ -401,3 +401,21 @@ func TestServer_SettingsRoutes_Registered(t *testing.T) {
 		t.Errorf("GET /api/settings/apikeys: status = %d, want 200", w2.Code)
 	}
 }
+
+func TestServer_SettingsRoutes_RevealRoutedWithPathValue(t *testing.T) {
+	s := newTestServer(newStubRouter(nil, ""), newStubRouter(nil, ""))
+	s.cfg = config.Config{RequiredAPIKeys: []config.APIKeyEntry{{ID: "abc123", Key: "sk-secret"}}}
+	s.routes()
+
+	r := httptest.NewRequest(http.MethodGet, "/api/settings/apikeys/abc123/reveal", nil)
+	r.Header.Set("Authorization", "Bearer sk-secret")
+	w := httptest.NewRecorder()
+	s.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body = %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "sk-secret") {
+		t.Errorf("body = %q, want it to contain the revealed key", w.Body.String())
+	}
+}

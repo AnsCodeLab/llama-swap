@@ -329,6 +329,11 @@ export async function deleteApiKey(id: string): Promise<void> {
   });
 }
 
+export async function revealApiKey(id: string): Promise<string> {
+  const result = await hubFetch<{ key: string }>(`/api/settings/apikeys/${id}/reveal`);
+  return result.key;
+}
+
 export async function fetchPerformance(after?: string): Promise<PerformanceResponse | null> {
   try {
     const url = after ? `/api/performance?after=${encodeURIComponent(after)}` : "/api/performance";

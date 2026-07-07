@@ -293,6 +293,7 @@ func (s *Server) routes() {
 	mux.HandleFunc("GET /api/settings/auth", s.handleSettingsAuthGet)
 	mux.HandleFunc("POST /api/settings/auth", s.handleSettingsAuthSet)
 	mux.HandleFunc("GET /api/settings/apikeys", s.handleSettingsAPIKeysList)
+	mux.HandleFunc("GET /api/settings/apikeys/{id}/reveal", s.handleSettingsAPIKeyReveal)
 	mux.HandleFunc("POST /api/settings/apikeys/generate", s.handleSettingsAPIKeyGenerate)
 	mux.HandleFunc("POST /api/settings/apikeys/delete", s.handleSettingsAPIKeyDelete)
 

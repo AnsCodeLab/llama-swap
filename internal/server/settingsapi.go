@@ -107,6 +107,25 @@ func (s *Server) handleSettingsAPIKeysList(w http.ResponseWriter, r *http.Reques
 	sendJSON(w, out)
 }
 
+// handleSettingsAPIKeyReveal returns the plaintext value of an existing key
+// by id, so the Settings page can offer "copy" on any row, not just the one
+// just generated. This is a deliberate, reviewed relaxation of the
+// shown-once-at-creation default: any authenticated caller can pull back any
+// key's plaintext at any time, which widens what a compromised Settings
+// session can exfiltrate. It is gated by the same global auth as every
+// other route (nothing extra here), since that's the boundary the user
+// accepted this tradeoff against.
+func (s *Server) handleSettingsAPIKeyReveal(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	for _, k := range s.cfg.RequiredAPIKeys {
+		if k.ID != "" && k.ID == id {
+			sendJSON(w, map[string]string{"key": k.Key})
+			return
+		}
+	}
+	router.SendResponse(w, r, http.StatusNotFound, "no API key with that id")
+}
+
 func (s *Server) handleSettingsAPIKeyGenerate(w http.ResponseWriter, r *http.Request) {
 	if !s.settingsEnabled(w, r) {
 		return
